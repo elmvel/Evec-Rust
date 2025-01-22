@@ -1,0 +1,63 @@
+#![allow(warnings)] // for now
+
+use crate::lexer::Lexer;
+use crate::parser::Parser;
+use crate::gen::Compiletime;
+
+mod lexer;
+mod ast;
+mod precedence;
+mod parser;
+mod errors;
+mod gen;
+
+// https://matklad.github.io/2020/04/13/simple-but-powerful-pratt-parsing.html
+
+// TODO: very dumb box allocations, but maybe its fine?
+
+fn main() {
+    let mut lexer = Lexer::new(
+        r#"
+module hello;
+
+main :: fn() {
+    let x = 420;
+    dbg x;
+}
+        "#).unwrap();
+    let mut parser = Parser::from(lexer);
+
+    let parse_module = parser.parse().map_err(|e| {
+        eprintln!("Error: {e:?}");
+    }).unwrap();
+    println!("{:?}", parse_module.globals);
+    let mut comptime = Compiletime::new(vec![parse_module]);
+    comptime.emit().unwrap();
+}
+
+#[test]
+fn tests() {
+    let s = parse_expr("a");
+    assert_eq!(s.to_string(), "a");
+
+    let s = parse_expr("69");
+    assert_eq!(s.to_string(), "69");
+
+    let s = parse_expr("1 + 2 * 3");
+    assert_eq!(s.to_string(), "(+ 1 (* 2 3))");
+
+    let s = parse_expr("f . g . h");
+    assert_eq!(s.to_string(), "(. f (. g h))");
+
+    let s = parse_expr("-fov");
+    assert_eq!(s.to_string(), "(- fov)");
+
+    let s = parse_expr("52!");
+    assert_eq!(s.to_string(), "(! 52)");
+
+    let s = parse_expr("((((a))))");
+    assert_eq!(s.to_string(), "a");
+
+    let s = parse_expr("arr[idx]");
+    assert_eq!(s.to_string(), "([ arr idx)");
+}
