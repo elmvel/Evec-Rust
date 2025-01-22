@@ -21,7 +21,7 @@ fn main() {
 module hello;
 
 main :: fn() {
-    let x = 69;
+    let x = 1337;
     dbg x;
 }
         "#).unwrap();
