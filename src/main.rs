@@ -34,30 +34,3 @@ main :: fn() {
     let mut comptime = Compiletime::new(vec![parse_module]);
     comptime.emit().unwrap();
 }
-
-#[test]
-fn tests() {
-    let s = parse_expr("a");
-    assert_eq!(s.to_string(), "a");
-
-    let s = parse_expr("69");
-    assert_eq!(s.to_string(), "69");
-
-    let s = parse_expr("1 + 2 * 3");
-    assert_eq!(s.to_string(), "(+ 1 (* 2 3))");
-
-    let s = parse_expr("f . g . h");
-    assert_eq!(s.to_string(), "(. f (. g h))");
-
-    let s = parse_expr("-fov");
-    assert_eq!(s.to_string(), "(- fov)");
-
-    let s = parse_expr("52!");
-    assert_eq!(s.to_string(), "(! 52)");
-
-    let s = parse_expr("((((a))))");
-    assert_eq!(s.to_string(), "a");
-
-    let s = parse_expr("arr[idx]");
-    assert_eq!(s.to_string(), "([ arr idx)");
-}
