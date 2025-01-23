@@ -1,4 +1,4 @@
-use crate::lexer::{Lexer, Token};
+use crate::lexer::{Lexer, Token, Location};
 use crate::ast::*;
 
 use crate::precedence::*;
@@ -13,25 +13,25 @@ impl Parser {
     pub fn parse_expr_term(&mut self) -> Result<Expr> {
         let token = self.lexer.next();
         let expr = match token {
-            Token::Ident(_) => Expr::Ident(token),
-            Token::Int(_) => Expr::Number(token),
-            Token::Op('(') => {
+            Token::Ident(_, _) => Expr::Ident(token),
+            Token::Int(_, _) => Expr::Number(token),
+            Token::Op(_, '(') => {
                 let lhs = self.parse_expr_bp(0);
-                self.expect(Token::Op(')'))?;
+                self.expect(Token::Op(ldef!(), ')'))?;
                 lhs?
             },
-            Token::Op(op) => {
+            Token::Op(_, op) => {
                 let ((), r_bp) = prefix_binding_power(op);
                 let rhs = self.parse_expr_bp(r_bp);
                 Expr::UnOp(op, Box::new(rhs?))
             },
-            Token::Fn => {
-                self.expect(Token::Op('('))?;
+            Token::Fn(_) => {
+                self.expect(Token::Op(ldef!(), '('))?;
                 // TODO: params
-                self.expect(Token::Op(')'))?;
+                self.expect(Token::Op(ldef!(), ')'))?;
                 // TODO: return type
 
-                if self.lexer.peek() != Token::Op('{') {
+                if self.lexer.peek() != Token::Op(ldef!(), '{') {
                     return Err("Missing function body".into());
                 }
                 let stmts = self.parse_stmts()?;
@@ -48,7 +48,7 @@ impl Parser {
         loop {
             let op = match self.lexer.peek() {
                 Token::Eof => break,
-                Token::Op(op) => op,
+                Token::Op(_, op) => op,
                 t => panic!("bad token: {:?}", t),
             };
             
@@ -61,7 +61,7 @@ impl Parser {
                 
                 lhs = if op == '[' {
                     let rhs = self.parse_expr_bp(0);
-                    assert_eq!(self.lexer.next(), Token::Op(']'));
+                    assert_eq!(self.lexer.next(), Token::Op(ldef!(), ']'));
                     Expr::BinOp(op, Box::new(lhs), Box::new(rhs?))
                 } else {
                     Expr::UnOp(op, Box::new(lhs))

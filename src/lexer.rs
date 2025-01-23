@@ -6,18 +6,47 @@ use crate::errors::SyntaxError;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Token {
     // Core
-    Ident(String),
-    Int(i64),
-    Op(char),
-    Dots,
+    Ident(Location, String),
+    Int(Location, i64),
+    Op(Location, char),
+    Dots(Location),
 
     // Keywords
-    Module,
-    Fn,
-    Dbg,
-    Let,
+    Module(Location),
+    Fn(Location),
+    Dbg(Location),
+    Let(Location),
     
     Eof,
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct Location {
+    file_path: String,
+    line: usize,
+    column: usize,
+}
+
+// This is so expect_token function can work properly
+impl PartialEq for Location {
+    fn eq(&self, other: &Self) -> bool {
+        true
+    }
+}
+
+impl Eq for Location {}
+
+// Annoying but necessary
+macro_rules! ldef {
+    () => {
+        Location::default()
+    }
+}
+
+impl Location {
+    pub fn new(file_path: String, line: usize, column: usize) -> Self {
+        Self { file_path, line, column }
+    }
 }
 
 pub struct Lexer {
@@ -28,12 +57,27 @@ impl Lexer {
     pub fn new(input: &str) -> Result<Self, SyntaxError> {
         let mut tokens: Vec<Token> = Vec::new();
         let mut iter = input.chars().peekable();
+        let mut line = 1;
+        let mut col = 1;
         
+        // TODO: Rewrite this loop to do multi-token checks
+        // do "iter.peek" or maybe just while true and check for
+        // multi tokens first.
         while let Some(ch) = iter.next() {
             match ch {
-                ch if ch.is_whitespace() => continue,
+                '\n' => {
+                    line += 1;
+                    col = 1;
+                    continue;
+                },
+                ch if ch.is_whitespace() => {
+                    col += 1;
+                },
                 '+' | '-' | '*' | '/' | '.' | '!' | '(' | ')'
-                    | '[' | ']' | ';' | '{' | '}' | '=' => tokens.push(Token::Op(ch)),
+                    | '[' | ']' | ';' | '{' | '}' | '=' => {
+                        tokens.push(Token::Op(Location::new("temp".into(), line, col), ch));
+                        col += 1;
+                },
                 ':' => {
                     // Todo: Ugly way to get a multi-token
                     let next = iter.peek();
@@ -47,26 +91,33 @@ impl Lexer {
                     }
 
                     iter.next();
-                    tokens.push(Token::Op('D'));
+                    tokens.push(Token::Op(Location::new("temp".into(), line, col), 'D'));
+                    col += 2;
                 },
                 'a'..='z' | 'A'..='Z' | '_' => {
                     let n: String = iter::once(ch)
                         .chain(from_fn(|| iter.by_ref().next_if(|s| s.is_ascii_alphanumeric())))
                         .collect::<String>();
 
-                    Self::add_ident(n, &mut tokens);
+                    col += n.len();
+                    let loc = Location::new("temp".into(), line, col);
+                    Self::add_ident(n, &mut tokens, loc);
                 },
                 '1'..='9' => {
-                    let n: i64 = iter::once(ch)
+                    let s: String = iter::once(ch)
                         .chain(from_fn(|| iter.by_ref().next_if(|s| s.is_ascii_digit())))
-                        .collect::<String>()
-                        .parse()
-                        .unwrap();
+                        .collect::<String>();
+                    let n: i64 = s.parse().unwrap();
 
-                    tokens.push(Token::Int(n));  
+                    tokens.push(Token::Int(Location::new("temp".into(), line, col), n));  
+                    col += s.len();
                 },
                 _ => return Err(format!("Unknown character `{ch}`").into()),
             }
+        }
+
+        for token in &tokens {
+            println!("{token:?}");
         }
         
         tokens.reverse();
@@ -76,13 +127,13 @@ impl Lexer {
         })
     }
 
-    fn add_ident(id: String, tokens: &mut Vec<Token>) {
+    fn add_ident(id: String, tokens: &mut Vec<Token>, loc: Location) {
         let token = match &id[..] {
-            "module" => Token::Module,
-            "fn" => Token::Fn,
-            "dbg" => Token::Dbg,
-            "let" => Token::Let,
-            _ => Token::Ident(id),
+            "module" => Token::Module(loc),
+            "fn" => Token::Fn(loc),
+            "dbg" => Token::Dbg(loc),
+            "let" => Token::Let(loc),
+            _ => Token::Ident(loc, id),
         };
         tokens.push(token);  
     }

@@ -4,7 +4,7 @@ use crate::lexer::Lexer;
 use crate::parser::Parser;
 use crate::gen::Compiletime;
 
-mod lexer;
+#[macro_use] mod lexer;
 mod ast;
 mod precedence;
 mod parser;

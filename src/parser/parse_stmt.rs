@@ -1,4 +1,4 @@
-use crate::lexer::{Lexer, Token};
+use crate::lexer::{Lexer, Token, Location};
 use crate::ast::*;
 use crate::Parser;
 use crate::parser::Result;
@@ -6,11 +6,11 @@ use crate::parser::Result;
 impl Parser {
     pub fn parse_stmts(&mut self) -> Result<Vec<Stmt>> {
         let mut stmts = Vec::new();
-        self.expect(Token::Op('{'))?;
-        while self.lexer.peek() != Token::Op('}') {
+        self.expect(Token::Op(ldef!(), '{'))?;
+        while self.lexer.peek() != Token::Op(ldef!(), '}') {
             stmts.push(self.parse_stmt()?);
         }
-        self.expect(Token::Op('}'))?;
+        self.expect(Token::Op(ldef!(), '}'))?;
         Ok(stmts)
     }
 
@@ -25,12 +25,12 @@ impl Parser {
     <stmt.dbg> = 'dbg' <expr> ';'
     */
     pub fn parse_stmt_dbg(&mut self) -> Result<Stmt> {
-        if !self.lexer.eat(Token::Dbg) {
+        if !self.lexer.eat(Token::Dbg(ldef!())) {
             return Err("dbg failed".into());
         }
 
         let expr = self.parse_expr()?;
-        self.expect(Token::Op(';'))?;
+        self.expect(Token::Op(ldef!(), ';'))?;
 
         Ok(Stmt::Dbg(expr))
     }
@@ -39,14 +39,14 @@ impl Parser {
     <stmt.let> = 'let' ID '=' <expr> ';'
     */
     pub fn parse_stmt_let(&mut self) -> Result<Stmt> {
-        if !self.lexer.eat(Token::Let) {
+        if !self.lexer.eat(Token::Let(ldef!())) {
             return Err("let failed".into());
         }
 
         let Expr::Ident(token) = self.parse_expr_ident()? else { unreachable!() };
-        self.expect(Token::Op('='))?;
+        self.expect(Token::Op(ldef!(), '='))?;
         let expr = self.parse_expr()?;
-        self.expect(Token::Op(';'))?;
+        self.expect(Token::Op(ldef!(), ';'))?;
 
         Ok(Stmt::Let(token, expr))
     }

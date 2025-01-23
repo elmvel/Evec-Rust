@@ -4,7 +4,7 @@ use std::io::Write as IoWrite;
 use std::fs::File;
 use std::process::Command;
 
-use crate::lexer::Token;
+use crate::lexer::{Token, Location};
 use crate::parser::ParseModule;
 use crate::parser::Result;
 use crate::ast::*;
@@ -53,8 +53,8 @@ impl StackFrame {
         self.var_table.insert(name, val);
     }
 
-    pub fn symtab_lookup(&mut self, name: &str) -> Result<StackValue> {
-        self.var_table.get(name).cloned().ok_or(format!("No variable exists of name '{name}'").into())
+    pub fn symtab_lookup(&mut self, name: &str, loc: Location) -> Result<StackValue> {
+        self.var_table.get(name).cloned().ok_or(format!("{loc:?} No variable exists of name '{name}'").into())
     }
 }
 
@@ -138,7 +138,7 @@ impl Generator {
     }
 
     pub fn emit_function(&mut self, name: Token, stmts: Vec<Stmt>) -> Result<()> {
-        let Token::Ident(text) = name else {
+        let Token::Ident(_, text) = name else {
             unreachable!("must have an ident here")
         };
 
@@ -168,7 +168,7 @@ impl Generator {
                 Ok(())
             },
             Stmt::Let(name, expr) => {
-                let Token::Ident(text) = name else { unreachable!() };
+                let Token::Ident(_, text) = name else { unreachable!() };
                 
                 let val = self.emit_expr(expr)?;
                 let frame = self.current_frame()?;
@@ -182,9 +182,9 @@ impl Generator {
     pub fn emit_expr(&mut self, expr: Expr) -> Result<StackValue> {
         match expr {
             Expr::Ident(token) => {
-                let Token::Ident(text) = token else { unreachable!() };
+                let Token::Ident(loc, text) = token else { unreachable!() };
                 let frame = self.current_frame()?;
-                let val = frame.symtab_lookup(&text)?;
+                let val = frame.symtab_lookup(&text, loc)?;
                 Ok(val)
             },
             Expr::Path(token, box_expr) => {
@@ -192,7 +192,7 @@ impl Generator {
             },
             Expr::Number(token) => {
                 // TODO: assuming its an i32 for now
-                let Token::Int(i) = token else { unreachable!() };
+                let Token::Int(_, i) = token else { unreachable!() };
                 let mut frame = self.current_frame()?;
                 let tag = frame.alloc();
 

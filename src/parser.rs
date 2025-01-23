@@ -1,4 +1,4 @@
-use crate::lexer::{Lexer, Token};
+use crate::lexer::{Lexer, Token, Location};
 use crate::ast::*;
 
 use crate::precedence::*;
@@ -56,7 +56,7 @@ impl Parser {
     pub fn parse_expr_ident(&mut self) -> Result<Expr> {
         let token = self.lexer.peek();
         match token {
-            Token::Ident(_) => {
+            Token::Ident(_, _) => {
                 self.lexer.next();
                 Ok(Expr::Ident(token))
             },
@@ -66,7 +66,7 @@ impl Parser {
     
     pub fn parse_expr_path(&mut self) -> Result<Expr> {
         let mut path = self.parse_expr_ident()?;
-        while let Token::Op('D') = self.lexer.peek() {
+        while let Token::Op(_, 'D') = self.lexer.peek() {
             self.lexer.next();
 
             let Expr::Ident(token) = path else { unreachable!() };
@@ -80,12 +80,12 @@ impl Parser {
     <global.mod_decl> ::= 'module' <expr.path> ';'
     */
     pub fn parse_module_decl(&mut self) -> Result<Global> {
-        if !self.lexer.eat(Token::Module) {
+        if !self.lexer.eat(Token::Module(ldef!())) {
             return Err("Module header is required!".into());
         }
 
         let decl = Global::DeclModule(self.parse_expr_path()?);
-        self.expect(Token::Op(';'))?;
+        self.expect(Token::Op(ldef!(), ';'))?;
         Ok(decl)
     }
 
@@ -94,7 +94,7 @@ impl Parser {
     */
     pub fn parse_global(&mut self) -> Result<Global> {
         let Expr::Ident(token) = self.parse_expr_ident()? else { unreachable!() };
-        self.expect(Token::Op('D'))?;
+        self.expect(Token::Op(ldef!(), 'D'))?;
         let expr = self.parse_expr()?;
         Ok(Global::Decl(token, expr))
     }
