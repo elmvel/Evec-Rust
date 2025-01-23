@@ -1,3 +1,5 @@
+use std::fmt;
+
 #[derive(Debug)]
 pub struct SyntaxError {
     pub message: String,
@@ -20,5 +22,11 @@ impl Into<SyntaxError> for &str {
 impl Into<SyntaxError> for String {
     fn into(self) -> SyntaxError {
         SyntaxError::new(self)
+    }
+}
+
+impl fmt::Display for SyntaxError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.message)
     }
 }

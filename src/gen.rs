@@ -23,7 +23,7 @@ struct Module {
 /////////// Bookkeeping ////////////////
 
 // Might need to be an enum at some point for other "values"
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 struct StackValue {
     tag: usize,
 }
@@ -120,7 +120,7 @@ impl Generator {
         self.decorated_mod.globals.reverse();
         while !self.decorated_mod.globals.is_empty() {
             let global = self.decorated_mod.globals.pop().unwrap();
-            self.emit_global(global);
+            self.emit_global(global)?;
         }
         Ok(())
     }
@@ -155,7 +155,7 @@ impl Generator {
 
     pub fn emit_stmts(&mut self, stmts: Vec<Stmt>) -> Result<()> {
         for stmt in stmts {
-            self.emit_stmt(stmt);
+            self.emit_stmt(stmt)?;
         }
         Ok(())
     }
@@ -232,7 +232,7 @@ impl Compiletime {
 
             let name = "out";
             let mut file = File::create(&format!("{name}.ssa")).or(Err("Could not create qbe output file".into()))?;
-            write!(file, "{}", generator.generated_mod.output);
+            let _ = write!(file, "{}", generator.generated_mod.output);
 
             // .ssa -> .s
             if !Command::new("qbe")

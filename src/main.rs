@@ -21,16 +21,18 @@ fn main() {
 module hello;
 
 main :: fn() {
-    let x = 1337;
     dbg x;
+    let x = 1337;
 }
         "#).unwrap();
     let mut parser = Parser::from(lexer);
 
     let parse_module = parser.parse().map_err(|e| {
-        eprintln!("Error: {e:?}");
+        eprintln!("ERROR: {e:?}");
     }).unwrap();
     println!("{:?}", parse_module.globals);
     let mut comptime = Compiletime::new(vec![parse_module]);
-    comptime.emit().unwrap();
+    let _ = comptime.emit().map_err(|e| {
+        eprintln!("ERROR: {e}");
+    });
 }
