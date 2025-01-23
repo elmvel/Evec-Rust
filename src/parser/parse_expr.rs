@@ -4,6 +4,7 @@ use crate::ast::*;
 use crate::precedence::*;
 use crate::Parser;
 use crate::parser::Result;
+use crate::errors::SyntaxError;
 
 impl Parser {
     pub fn parse_expr(&mut self) -> Result<Expr> {
@@ -25,19 +26,20 @@ impl Parser {
                 let rhs = self.parse_expr_bp(r_bp);
                 Expr::UnOp(op, Box::new(rhs?))
             },
-            Token::Fn(_) => {
+            Token::Fn(loc) => {
                 self.expect(Token::Op(ldef!(), '('))?;
                 // TODO: params
                 self.expect(Token::Op(ldef!(), ')'))?;
                 // TODO: return type
 
                 if self.lexer.peek() != Token::Op(ldef!(), '{') {
-                    return Err("Missing function body".into());
+                    return Err(error!(loc, "Missing function body"));
                 }
                 let stmts = self.parse_stmts()?;
                 Expr::Func(stmts)
             },
-            t => Err(format!("Could not parse expr term from {t:?}").into())?,
+            Token::Eof => Err(error_orphan!("Could not parse expr term from end-of-file"))?,
+            t => Err(error!(t.loc(), "Could not parse expr term from {t:?}"))?,
         };
         Ok(expr)
     }

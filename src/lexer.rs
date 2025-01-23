@@ -1,4 +1,5 @@
 use std::iter;
+use std::fmt;
 use core::iter::from_fn;
 
 use crate::errors::SyntaxError;
@@ -20,11 +21,33 @@ pub enum Token {
     Eof,
 }
 
+impl Token {
+    pub fn loc(&self) -> Location {
+        match self {
+            Token::Ident(loc, _) => loc.clone(),
+            Token::Int(loc, _) => loc.clone(),
+            Token::Op(loc, _) => loc.clone(),
+            Token::Dots(loc) => loc.clone(),
+            Token::Module(loc) => loc.clone(),
+            Token::Fn(loc) => loc.clone(),
+            Token::Dbg(loc) => loc.clone(),
+            Token::Let(loc) => loc.clone(),
+            Token::Eof => panic!("Didn't handle Eof in previous match case"),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Default)]
 pub struct Location {
     file_path: String,
     line: usize,
     column: usize,
+}
+
+impl fmt::Display for Location {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}:{}:{}:", self.file_path, self.line, self.column)
+    }
 }
 
 // This is so expect_token function can work properly
@@ -82,12 +105,14 @@ impl Lexer {
                     // Todo: Ugly way to get a multi-token
                     let next = iter.peek();
                     if next.is_none() {
-                        return Err(format!("Unknown character `{ch}`").into());
+                        let loc = Location::new("temp".into(), line, col);
+                        return Err(error!(loc, "Unknown character `{ch}`"));
                     }
 
                     let ch2 = next.unwrap();
                     if *ch2 != ':' {
-                        return Err(format!("Unknown character `{ch}`").into());
+                        let loc = Location::new("temp".into(), line, col);
+                        return Err(error!(loc, "Unknown character `{ch}`"));
                     }
 
                     iter.next();
@@ -112,12 +137,8 @@ impl Lexer {
                     tokens.push(Token::Int(Location::new("temp".into(), line, col), n));  
                     col += s.len();
                 },
-                _ => return Err(format!("Unknown character `{ch}`").into()),
+                _ => return Err(error!(Location::new("temp".into(), line, col), "Unknown character `{ch}`")),
             }
-        }
-
-        for token in &tokens {
-            println!("{token:?}");
         }
         
         tokens.reverse();

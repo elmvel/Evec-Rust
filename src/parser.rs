@@ -32,7 +32,10 @@ impl Parser {
     fn expect(&mut self, token: Token) -> Result<()> {
         let next = self.lexer.next();
         if next != token {
-            return Err(format!("Expected `{token:?}`, got `{next:?}` instead!").into());
+            return match next {
+                Token::Eof => Err(error_orphan!("Expected `{token:?}`, got end-of-file instead!")),
+                t => Err(error!(t.loc(), "Expected `{token:?}`, got `{t:?}` instead!")),
+            }
         }
         Ok(())
     }
@@ -60,7 +63,8 @@ impl Parser {
                 self.lexer.next();
                 Ok(Expr::Ident(token))
             },
-            _ => Err("No identifier present".into())
+            Token::Eof => Err(error_orphan!("No identifier present")),
+            t => Err(error!(t.loc(), "No identifier present")),
         }
     }
     
@@ -81,7 +85,10 @@ impl Parser {
     */
     pub fn parse_module_decl(&mut self) -> Result<Global> {
         if !self.lexer.eat(Token::Module(ldef!())) {
-            return Err("Module header is required!".into());
+            return match self.lexer.peek() {
+                Token::Eof => Err(error_orphan!("Module header is required! Got empty file instead.")),
+                t => Err(error!(t.loc(), "Module header is required!")),
+            }
         }
 
         let decl = Global::DeclModule(self.parse_expr_path()?);

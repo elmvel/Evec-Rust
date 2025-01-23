@@ -2,6 +2,7 @@ use crate::lexer::{Lexer, Token, Location};
 use crate::ast::*;
 use crate::Parser;
 use crate::parser::Result;
+use crate::errors::SyntaxError;
 
 impl Parser {
     pub fn parse_stmts(&mut self) -> Result<Vec<Stmt>> {
@@ -17,7 +18,13 @@ impl Parser {
     pub fn parse_stmt(&mut self) -> Result<Stmt> {
         let stmt = self.parse_stmt_dbg()
             .or(self.parse_stmt_let())
-            .or(Err(format!("Could not parse stmt: Unknown token `{:?}`", self.lexer.peek()).into()));
+            .or_else(|_| {
+                let token = self.lexer.peek();
+                match token {
+                    Token::Eof => Err(error_orphan!("Could not parse stmt: Unexpected end-of-file")),
+                    t => Err(error!(t.loc(), "Could not parse stmt: Unexpected token `{t:?}`"))
+                }
+            });
         stmt
     }
 
@@ -26,7 +33,7 @@ impl Parser {
     */
     pub fn parse_stmt_dbg(&mut self) -> Result<Stmt> {
         if !self.lexer.eat(Token::Dbg(ldef!())) {
-            return Err("dbg failed".into());
+            return Err(error_orphan!("dbg failed"));
         }
 
         let expr = self.parse_expr()?;
@@ -40,7 +47,7 @@ impl Parser {
     */
     pub fn parse_stmt_let(&mut self) -> Result<Stmt> {
         if !self.lexer.eat(Token::Let(ldef!())) {
-            return Err("let failed".into());
+            return Err(error_orphan!("let failed"));
         }
 
         let Expr::Ident(token) = self.parse_expr_ident()? else { unreachable!() };

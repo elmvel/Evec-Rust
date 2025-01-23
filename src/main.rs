@@ -4,6 +4,8 @@ use crate::lexer::Lexer;
 use crate::parser::Parser;
 use crate::gen::Compiletime;
 
+#[macro_use] 
+mod error_macro;
 #[macro_use] mod lexer;
 mod ast;
 mod precedence;
@@ -28,11 +30,11 @@ main :: fn() {
     let mut parser = Parser::from(lexer);
 
     let parse_module = parser.parse().map_err(|e| {
-        eprintln!("ERROR: {e:?}");
+        eprintln!("{e}");
     }).unwrap();
     println!("{:?}", parse_module.globals);
     let mut comptime = Compiletime::new(vec![parse_module]);
     let _ = comptime.emit().map_err(|e| {
-        eprintln!("ERROR: {e}");
+        eprintln!("{e}");
     });
 }

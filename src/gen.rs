@@ -8,6 +8,7 @@ use crate::lexer::{Token, Location};
 use crate::parser::ParseModule;
 use crate::parser::Result;
 use crate::ast::*;
+use crate::errors::SyntaxError;
 
 // Valid for Generator methods
 macro_rules! genf {
@@ -54,7 +55,7 @@ impl StackFrame {
     }
 
     pub fn symtab_lookup(&mut self, name: &str, loc: Location) -> Result<StackValue> {
-        self.var_table.get(name).cloned().ok_or(format!("{loc:?} No variable exists of name '{name}'").into())
+        self.var_table.get(name).cloned().ok_or(error!(loc, "No variable exists of name '{name}'"))
     }
 }
 
@@ -129,11 +130,11 @@ impl Generator {
         match global {
             Global::Decl(name, expr) => {
                 let Expr::Func(stmts) = expr else {
-                    return Err("Only global functions are supported for now!".into());
+                    return Err(error!(name.loc(), "Only global functions are supported for now!"));
                 };
                 self.emit_function(name, stmts)
             },
-            g => Err(format!("Unknown global {g:?}").into())
+            g => Err(error_orphan!("Unknown global {g:?}"))
         }
     }
 
@@ -231,7 +232,7 @@ impl Compiletime {
             // TODO: I need some way to preserve file names for qbe output files
 
             let name = "out";
-            let mut file = File::create(&format!("{name}.ssa")).or(Err("Could not create qbe output file".into()))?;
+            let mut file = File::create(&format!("{name}.ssa")).or(Err(error_orphan!("Could not create qbe output file")))?;
             let _ = write!(file, "{}", generator.generated_mod.output);
 
             // .ssa -> .s
@@ -243,7 +244,7 @@ impl Compiletime {
                 .expect("ERROR: qbe not found")
                 .success()
             {
-                return Err("Failure with getting assembly from QBE".into());
+                return Err(error_orphan!("Failure with getting assembly from QBE"));
             }
 
             // .s -> .o
@@ -254,7 +255,7 @@ impl Compiletime {
                 .expect("ERROR: qbe not found")
                 .success()
             {
-                return Err("Failure with getting assembly from QBE".into());
+                return Err(error_orphan!("Failure with getting object file from assembly"));
             }
 
             objs.push(format!("{name}.o"));
@@ -268,7 +269,7 @@ impl Compiletime {
             .expect("ERROR: qbe not found")
             .success()
         {
-            return Err("Failure with linking final executable".into());
+            return Err(error_orphan!("Failure with linking final executable!"));
         }
 
         println!("Created executable b.out!");
