@@ -99,8 +99,8 @@ impl Lexer {
                         .chain(from_fn(|| iter.by_ref().next_if(|s| s.is_ascii_alphanumeric())))
                         .collect::<String>();
 
-                    col += n.len();
                     let loc = Location::new("temp".into(), line, col);
+                    col += n.len();
                     Self::add_ident(n, &mut tokens, loc);
                 },
                 '1'..='9' => {
