@@ -17,6 +17,16 @@ pub enum Token {
     Fn(Location),
     Dbg(Location),
     Let(Location),
+
+    // Types
+    U64(Location),
+    U32(Location),
+    U16(Location),
+    U8(Location),
+    S64(Location),
+    S32(Location),
+    S16(Location),
+    S8(Location),
     
     Eof,
 }
@@ -32,6 +42,14 @@ impl Token {
             Token::Fn(loc) => loc.clone(),
             Token::Dbg(loc) => loc.clone(),
             Token::Let(loc) => loc.clone(),
+            Token::U64(loc) => loc.clone(),
+            Token::U32(loc) => loc.clone(),
+            Token::U16(loc) => loc.clone(),
+            Token::U8(loc) => loc.clone(),
+            Token::S64(loc) => loc.clone(),
+            Token::S32(loc) => loc.clone(),
+            Token::S16(loc) => loc.clone(),
+            Token::S8(loc) => loc.clone(),
             Token::Eof => panic!("Didn't handle Eof in previous match case"),
         }
     }
@@ -149,6 +167,10 @@ impl Lexer {
                 _ => return Err(error!(Location::new(input_path.into(), line, col), "Unknown character `{ch}`")),
             }
         }
+
+        for token in &tokens {
+            println!("{token:?}");
+        }
         
         tokens.reverse();
         
@@ -163,6 +185,15 @@ impl Lexer {
             "fn" => Token::Fn(loc),
             "dbg" => Token::Dbg(loc),
             "let" => Token::Let(loc),
+
+            "u64" => Token::U64(loc),
+            "u32" => Token::U32(loc),
+            "u16" => Token::U16(loc),
+            "u8" => Token::U8(loc),
+            "s64" => Token::S64(loc),
+            "s32" => Token::S32(loc),
+            "s16" => Token::S16(loc),
+            "s8" => Token::S8(loc),
             _ => Token::Ident(loc, id),
         };
         tokens.push(token);  
@@ -180,7 +211,7 @@ impl Lexer {
 
     pub fn eat(&mut self, token: Token) -> bool {
         let peek = self.peek();
-        if std::mem::discriminant(&peek) == std::mem::discriminant(&token) {
+        if peek == token {
             self.next();
             return true;
         }

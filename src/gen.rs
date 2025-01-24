@@ -76,6 +76,7 @@ struct Generator {
     decorated_mod: ParseModule,
     pub generated_mod: GeneratedModule,
     frames: Vec<StackFrame>,
+    expected_type: Option<Type>,
 }
 
 impl Generator {
@@ -84,6 +85,7 @@ impl Generator {
             decorated_mod,
             generated_mod: GeneratedModule::default(),
             frames: Vec::new(),
+            expected_type: None,
         }
     }
 
@@ -168,7 +170,7 @@ impl Generator {
                 genf!(self, "%.void =w call $printf(l $fmt_d, ..., w %.s{})", val);
                 Ok(())
             },
-            Stmt::Let(name, expr) => {
+            Stmt::Let(name, typ, expr) => {
                 let Token::Ident(_, text) = name else { unreachable!() };
                 
                 let val = self.emit_expr(expr)?;
