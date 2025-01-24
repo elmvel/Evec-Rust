@@ -1,5 +1,7 @@
 #![allow(warnings)] // for now
 
+use std::process::ExitCode;
+
 use crate::lexer::Lexer;
 use crate::parser::Parser;
 use crate::gen::Compiletime;
@@ -17,24 +19,37 @@ mod gen;
 
 // TODO: very dumb box allocations, but maybe its fine?
 
-fn main() {
-    let mut lexer = Lexer::new(
-        r#"
-module hello;
-
-main :: fn() {
-    dbg x;
-    let x = 1337;
-}
-        "#).unwrap();
+fn entry(input_path: String) -> crate::parser::Result<()> {
+    let mut lexer = Lexer::new(&input_path).unwrap();
     let mut parser = Parser::from(lexer);
 
     let parse_module = parser.parse().map_err(|e| {
         eprintln!("{e}");
-    }).unwrap();
+        e
+    })?;
     println!("{:?}", parse_module.globals);
     let mut comptime = Compiletime::new(vec![parse_module]);
     let _ = comptime.emit().map_err(|e| {
         eprintln!("{e}");
-    });
+        e
+    })?;
+    Ok(())
+}
+
+fn main() -> ExitCode {
+    let mut args = std::env::args();
+    let program = args.next().expect("program");
+
+    let input_path = if let Some(input_path) = args.next() {
+        input_path
+    } else {
+        eprintln!("Usage: {program} <file.eve>");
+        eprintln!("error: no input is provided");
+        return ExitCode::FAILURE;
+    };
+
+    match entry(input_path) {
+        Ok(_) => ExitCode::SUCCESS,
+        Err(_) => ExitCode::FAILURE,
+    }
 }

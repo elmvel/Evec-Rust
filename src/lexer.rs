@@ -77,7 +77,12 @@ pub struct Lexer {
 }
 
 impl Lexer {
-    pub fn new(input: &str) -> Result<Self, SyntaxError> {
+    pub fn new(input_path: &str) -> Result<Self, SyntaxError> {
+        let Ok(input) = std::fs::read_to_string(input_path) else {
+            eprintln!("error: Could not find file '{input_path}'");
+            std::process::exit(1);
+        };
+        
         let mut tokens: Vec<Token> = Vec::new();
         let mut iter = input.chars().peekable();
         let mut line = 1;
@@ -98,25 +103,25 @@ impl Lexer {
                 },
                 '+' | '-' | '*' | '/' | '.' | '!' | '(' | ')'
                     | '[' | ']' | ';' | '{' | '}' | '=' => {
-                        tokens.push(Token::Op(Location::new("temp".into(), line, col), ch));
+                        tokens.push(Token::Op(Location::new(input_path.into(), line, col), ch));
                         col += 1;
                 },
                 ':' => {
                     // Todo: Ugly way to get a multi-token
                     let next = iter.peek();
                     if next.is_none() {
-                        let loc = Location::new("temp".into(), line, col);
+                        let loc = Location::new(input_path.into(), line, col);
                         return Err(error!(loc, "Unknown character `{ch}`"));
                     }
 
                     let ch2 = next.unwrap();
                     if *ch2 != ':' {
-                        let loc = Location::new("temp".into(), line, col);
+                        let loc = Location::new(input_path.into(), line, col);
                         return Err(error!(loc, "Unknown character `{ch}`"));
                     }
 
                     iter.next();
-                    tokens.push(Token::Op(Location::new("temp".into(), line, col), 'D'));
+                    tokens.push(Token::Op(Location::new(input_path.into(), line, col), 'D'));
                     col += 2;
                 },
                 'a'..='z' | 'A'..='Z' | '_' => {
@@ -124,7 +129,7 @@ impl Lexer {
                         .chain(from_fn(|| iter.by_ref().next_if(|s| s.is_ascii_alphanumeric())))
                         .collect::<String>();
 
-                    let loc = Location::new("temp".into(), line, col);
+                    let loc = Location::new(input_path.into(), line, col);
                     col += n.len();
                     Self::add_ident(n, &mut tokens, loc);
                 },
@@ -134,10 +139,10 @@ impl Lexer {
                         .collect::<String>();
                     let n: i64 = s.parse().unwrap();
 
-                    tokens.push(Token::Int(Location::new("temp".into(), line, col), n));  
+                    tokens.push(Token::Int(Location::new(input_path.into(), line, col), n));  
                     col += s.len();
                 },
-                _ => return Err(error!(Location::new("temp".into(), line, col), "Unknown character `{ch}`")),
+                _ => return Err(error!(Location::new(input_path.into(), line, col), "Unknown character `{ch}`")),
             }
         }
         
