@@ -111,13 +111,17 @@ impl Lexer {
                     let next = iter.peek();
                     if next.is_none() {
                         let loc = Location::new(input_path.into(), line, col);
-                        return Err(error!(loc, "Unknown character `{ch}`"));
+                        tokens.push(Token::Op(loc, ':'));
+                        col += 1;
+                        continue;
                     }
 
                     let ch2 = next.unwrap();
                     if *ch2 != ':' {
                         let loc = Location::new(input_path.into(), line, col);
-                        return Err(error!(loc, "Unknown character `{ch}`"));
+                        tokens.push(Token::Op(loc, ':'));
+                        col += 1;
+                        continue;
                     }
 
                     iter.next();
