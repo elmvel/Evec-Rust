@@ -27,7 +27,7 @@ pub enum Expr {
     Func(Vec<Stmt>), // Eventually Func(Token, Vec<Param>, RetType, Vec<Stmt>)
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Type {
     U64,
     U32,

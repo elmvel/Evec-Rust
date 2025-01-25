@@ -26,6 +26,7 @@ struct Module {
 // Might need to be an enum at some point for other "values"
 #[derive(Clone, Debug)]
 struct StackValue {
+    typ: Type,
     tag: usize,
 }
 
@@ -117,6 +118,7 @@ impl Generator {
         // TODO: set the name field of the gen module
         self.writeln("# QBE Start");
         genf!(self, "data $fmt_d = {{ b \"%d\\n\", b 0 }}");
+        genf!(self, "data $fmt_ll = {{ b \"%lld\\n\", b 0 }}");
         // for global in self.decorated_mod.globals.drain(..) {
         //     self.emit_global(global)?;
         // }
@@ -166,14 +168,24 @@ impl Generator {
     pub fn emit_stmt(&mut self, stmt: Stmt) -> Result<()> {
         match stmt {
             Stmt::Dbg(expr) => {
-                let val = self.emit_expr(expr)?;
-                genf!(self, "%.void =w call $printf(l $fmt_d, ..., w %.s{})", val);
+                let val = self.emit_expr(expr, None)?;
+
+                match val.typ {
+                    Type::U64 | Type::S64 => {
+                        genf!(self, "%.void =w call $printf(l $fmt_ll, ..., l %.s{})", val);
+                    },
+                    Type::U32 | Type::U16 | Type::U8 |
+                    Type::S32 | Type::S16 | Type::S8 => {
+                        genf!(self, "%.void =w call $printf(l $fmt_d, ..., w %.s{})", val);
+                    },
+                }
+                // TODO: match on stackvalue's type
                 Ok(())
             },
             Stmt::Let(name, typ, expr) => {
                 let Token::Ident(_, text) = name else { unreachable!() };
                 
-                let val = self.emit_expr(expr)?;
+                let val = self.emit_expr(expr, typ)?;
                 let frame = self.current_frame()?;
                 frame.symtab_store(text, val);
                 Ok(())
@@ -182,7 +194,7 @@ impl Generator {
         }
     }
 
-    pub fn emit_expr(&mut self, expr: Expr) -> Result<StackValue> {
+    pub fn emit_expr(&mut self, expr: Expr, expected_type: Option<Type>) -> Result<StackValue> {
         match expr {
             Expr::Ident(token) => {
                 let Token::Ident(loc, text) = token else { unreachable!() };
@@ -199,14 +211,34 @@ impl Generator {
                 let mut frame = self.current_frame()?;
                 let tag = frame.alloc();
 
-                genf!(self, "%.s{tag} =w copy {i}");
-                Ok(StackValue{ tag })
+                let typ = expected_type.unwrap_or(Type::S32);
+                let qtyp = typ.qbe_type();
+                genf!(self, "%.s{tag} ={qtyp} copy {i}");
+                Ok(StackValue{ typ, tag })
             },
             Expr::BinOp(ch, box_lhs, box_rhs) => {
                 todo!()
             },
             Expr::UnOp(ch, box_expr) => {
-                todo!()
+                match ch {
+                    '-' => {
+                        match *box_expr {
+                            Expr::Number(token) => {
+                                let Token::Int(_, i) = token else { unreachable!() };
+                                let mut frame = self.current_frame()?;
+                                let tag = frame.alloc();
+
+                                let typ = expected_type.unwrap_or(Type::S32);
+                                let qtyp = typ.qbe_type();
+                                genf!(self, "%.s{tag} ={qtyp} copy -{i}");
+                                Ok(StackValue{ typ, tag })
+                            },
+                            Expr::Ident(token) => todo!(),
+                            _ => unreachable!("Unsupported expr"),
+                        }
+                    },
+                    c => todo!("op `{c}`"),
+                }
             },
             Expr::Func(stmts) => {
                 unreachable!("TBD: Should I put emit_function in here?")

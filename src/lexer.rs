@@ -159,7 +159,8 @@ impl Lexer {
                     let s: String = iter::once(ch)
                         .chain(from_fn(|| iter.by_ref().next_if(|s| s.is_ascii_digit())))
                         .collect::<String>();
-                    let n: i64 = s.parse().unwrap();
+                    let loc = Location::new(input_path.into(), line, col);
+                    let n: i64 = s.parse().map_err(|_| error!(loc, "Could not parse signed 64 bit integer"))?;
 
                     tokens.push(Token::Int(Location::new(input_path.into(), line, col), n));  
                     col += s.len();
@@ -168,9 +169,9 @@ impl Lexer {
             }
         }
 
-        for token in &tokens {
-            println!("{token:?}");
-        }
+        // for token in &tokens {
+        //     println!("{token:?}");
+        // }
         
         tokens.reverse();
         

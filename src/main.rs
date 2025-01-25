@@ -20,14 +20,17 @@ mod gen;
 // TODO: very dumb box allocations, but maybe its fine?
 
 fn entry(input_path: String) -> crate::parser::Result<()> {
-    let mut lexer = Lexer::new(&input_path).unwrap();
+    let mut lexer = Lexer::new(&input_path).map_err(|e| {
+        eprintln!("{e}");
+        e
+    })?;
     let mut parser = Parser::from(lexer);
 
     let parse_module = parser.parse().map_err(|e| {
         eprintln!("{e}");
         e
     })?;
-    println!("{:?}", parse_module.globals);
+    //println!("{:?}", parse_module.globals);
     let mut comptime = Compiletime::new(vec![parse_module]);
     let _ = comptime.emit().map_err(|e| {
         eprintln!("{e}");
