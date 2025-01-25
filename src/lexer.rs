@@ -119,6 +119,29 @@ impl Lexer {
                 ch if ch.is_whitespace() => {
                     col += 1;
                 },
+                '/' => {
+                    let next = iter.peek();
+                    if next.is_none() {
+                        let loc = Location::new(input_path.into(), line, col);
+                        tokens.push(Token::Op(loc, '/'));
+                        col += 1;
+                        continue;
+                    }
+
+                    let ch2 = next.unwrap();
+                    if *ch2 != '/' {
+                        let loc = Location::new(input_path.into(), line, col);
+                        tokens.push(Token::Op(loc, '/'));
+                        col += 1;
+                        continue;
+                    }
+
+                    iter.next();
+                    col += 2;
+                    let _: String = iter::once(ch)
+                        .chain(from_fn(|| iter.by_ref().next_if(|s| *s != '\n')))
+                        .collect::<String>();
+                },
                 '+' | '-' | '*' | '/' | '.' | '!' | '(' | ')'
                     | '[' | ']' | ';' | '{' | '}' | '=' => {
                         tokens.push(Token::Op(Location::new(input_path.into(), line, col), ch));
