@@ -4,5 +4,6 @@ module hello;
 // int main(void) { printf("Hello world!\n"); }
 
 main :: fn() {
-    dbg 1 && true;
+    let x = 0 > 1;
+    dbg x;
 }

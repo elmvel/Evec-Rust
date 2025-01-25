@@ -16,6 +16,7 @@ pub enum Op {
     Arr,
     AndAnd,
     OrOr,
+    Gt,
     Semi,
 }
 
@@ -33,6 +34,7 @@ impl TryInto<Op> for char {
             '!' => Ok(Op::Excl),
             '[' => Ok(Op::Arr),
             ';' => Ok(Op::Semi),
+            '>' => Ok(Op::Gt),
             c => Err(error_orphan!("Could not convert to op: {c}")),
         }
     }

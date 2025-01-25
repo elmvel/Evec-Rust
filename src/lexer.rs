@@ -157,8 +157,8 @@ impl Lexer {
                 ch if ch.is_whitespace() => {
                     col += 1;
                 },
-                '+' | '-' | '*' | '/' | '.' | '!' | '(' | ')'
-                    | '[' | ']' | ';' | '{' | '}' | '=' | ':' => {
+                '+' | '-' | '*' | '/' | '.' | '!' | '(' | ')' |
+                '[' | ']' | ';' | '{' | '}' | '=' | ':' | '>' => {
                         tokens.push(Token::Op(Location::new(input_path.into(), line, col), ch));
                         col += 1;
                 },
@@ -181,6 +181,15 @@ impl Lexer {
                     tokens.push(Token::Int(Location::new(input_path.into(), line, col), n));  
                     col += s.len();
                 },
+                '0' => {
+                    let s: String = iter::once(ch)
+                        .chain(from_fn(|| iter.by_ref().next_if(|s| *s == '0')))
+                        .collect::<String>();
+                    let loc = Location::new(input_path.into(), line, col);
+                    let n: i64 = s.parse().map_err(|_| error!(loc, "Could not parse signed 64 bit integer"))?;
+                    tokens.push(Token::Int(Location::new(input_path.into(), line, col), n));  
+                    col += s.len();
+                }
                 _ => return Err(error!(Location::new(input_path.into(), line, col), "Unknown character `{ch}`")),
             }
         }

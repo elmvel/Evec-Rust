@@ -363,6 +363,26 @@ impl Generator {
                         genf!(self, "@l{l}_end");
                         Ok(StackValue{ tag, typ: Type::Bool })
                     },
+                    Op::Gt => {
+                        let lloc = box_lhs.loc();
+                        let rloc = box_rhs.loc();
+                        
+                        let lval = self.emit_expr(*box_lhs, expected_type)?;
+                        lval.typ.assert_number(lloc)?;
+                        let rval = self.emit_expr(*box_rhs, Some(lval.typ.clone()))?;
+                        rval.typ.assert_number(rloc)?;
+
+                        let mut frame = self.current_frame()?;
+                        let tag = frame.alloc();
+
+                        let qtyp = lval.typ.qbe_type();
+                        if lval.typ.unsigned() {
+                            genf!(self, "%.s{tag} =w cugt{qtyp} %.s{}, %.s{}", (lval.tag), (rval.tag));
+                        } else {
+                            genf!(self, "%.s{tag} =w csgt{qtyp} %.s{}, %.s{}", (lval.tag), (rval.tag));
+                        }
+                        Ok(StackValue{ tag, typ: Type::Bool })
+                    },
                     _ => todo!()
                 }
             },
