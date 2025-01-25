@@ -217,7 +217,39 @@ impl Generator {
                 Ok(StackValue{ typ, tag })
             },
             Expr::BinOp(ch, box_lhs, box_rhs) => {
-                todo!()
+                match ch {
+                    '+' | '-' | '*' | '/' => {
+                        let lloc = box_lhs.loc();
+                        let rloc = box_rhs.loc();
+                        
+                        let lval = self.emit_expr(*box_lhs, expected_type)?;
+                        lval.typ.assert_number(lloc)?;
+                        let rval = self.emit_expr(*box_rhs, Some(lval.typ.clone()))?;
+                        rval.typ.assert_number(rloc)?;
+
+                        let mut frame = self.current_frame()?;
+                        let tag = frame.alloc();
+
+                        let qtyp = lval.typ.qbe_type();
+
+                        let instr = match ch {
+                            '+' => "add",
+                            '-' => "sub",
+                            '*' => "mul",
+                            '/' => {
+                                if lval.typ.unsigned() {
+                                    "udiv"
+                                } else {
+                                    "div"
+                                }
+                            },
+                            _ => unreachable!(),
+                        };
+                        genf!(self, "%.s{tag} ={qtyp} {instr} %.s{}, %.s{}", (lval.tag), (rval.tag));
+                        Ok(StackValue{ typ: lval.typ, tag })
+                    },
+                    _ => todo!()
+                }
             },
             Expr::UnOp(ch, box_expr) => {
                 match ch {
@@ -245,6 +277,8 @@ impl Generator {
             },
         }
     }
+
+    // fn 
 }
 
 impl Compiletime {
