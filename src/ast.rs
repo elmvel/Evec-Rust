@@ -24,6 +24,7 @@ pub enum Expr {
     Ident(Token), // foo
     Path(Token, Box<Expr>), // std::io => (String std) (::) (*Expr(io))
     Number(Token),
+    Bool(Token),
     BinOp(char, Box<Expr>, Box<Expr>),
     UnOp(char, Box<Expr>),
     Func(Vec<Stmt>), // Eventually Func(Token, Vec<Param>, RetType, Vec<Stmt>)
@@ -35,6 +36,7 @@ impl Expr {
             Expr::Ident(t) => t.loc(),
             Expr::Path(t, _) => t.loc(),
             Expr::Number(t) => t.loc(),
+            Expr::Bool(t) => t.loc(),
             Expr::BinOp(_, lhs, _) => lhs.loc(),
             Expr::UnOp(_, expr) => expr.loc(),
             Expr::Func(_) => todo!(),
@@ -52,6 +54,7 @@ pub enum Type {
     S32,
     S16,
     S8,
+    Bool,
 }
 
 impl Type {
@@ -61,6 +64,7 @@ impl Type {
             Type::U32 | Type::U16 | Type::U8 => "w",
             Type::S64 => "l",
             Type::S32 | Type::S16 | Type::S8 => "w",
+            Type::Bool => "w",
         }
     }
 

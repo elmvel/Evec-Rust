@@ -62,6 +62,7 @@ impl Parser {
             Token::S32(_) => Type::S32,
             Token::S16(_) => Type::S16,
             Token::S8(_) => Type::S8,
+            Token::Bool(_) => Type::Bool,
             Token::Eof => Err(error_orphan!("Expected type but got end-of-file"))?,
             t => Err(error!(t.loc(), "Expected type!"))?,
         };

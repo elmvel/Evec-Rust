@@ -119,6 +119,7 @@ impl Generator {
         self.writeln("# QBE Start");
         genf!(self, "data $fmt_d = {{ b \"%d\\n\", b 0 }}");
         genf!(self, "data $fmt_ll = {{ b \"%lld\\n\", b 0 }}");
+        genf!(self, "data $fmt_bool = {{ b \"bool: %d\\n\", b 0 }}");
         // for global in self.decorated_mod.globals.drain(..) {
         //     self.emit_global(global)?;
         // }
@@ -178,6 +179,9 @@ impl Generator {
                     Type::S32 | Type::S16 | Type::S8 => {
                         genf!(self, "%.void =w call $printf(l $fmt_d, ..., w %.s{})", val);
                     },
+                    Type::Bool => {
+                        genf!(self, "%.void =w call $printf(l $fmt_bool, ..., w %.s{})", val);
+                    }
                 }
                 // TODO: match on stackvalue's type
                 Ok(())
@@ -185,7 +189,13 @@ impl Generator {
             Stmt::Let(name, typ, expr) => {
                 let Token::Ident(loc, text) = name else { unreachable!() };
                 
-                let val = self.emit_expr(expr, typ)?;
+                let val = self.emit_expr(expr, typ.clone())?;
+                if let Some(expected_type) = typ {
+                    if val.typ != expected_type {
+                        return Err(error!(loc, "Expected type {expected_type:?}, but got {:?} instead", (val.typ)));
+                    }
+                }
+                
                 let frame = self.current_frame()?;
                 if frame.symtab_lookup(&text, loc.clone()).is_ok() {
                     return Err(error!(loc, "Redefinition of variable {text} is not allowed!"));
@@ -212,13 +222,34 @@ impl Generator {
             Expr::Path(token, box_expr) => {
                 todo!()
             },
+            Expr::Bool(token) => {
+                let mut frame = self.current_frame()?;
+                let tag = frame.alloc();
+
+                let b = match token {
+                    Token::True(_) => "1",
+                    Token::False(_) => "0",
+                    _ => unreachable!()
+                };
+
+                genf!(self, "%.s{tag} =w copy {b}");
+                Ok(StackValue{ typ: Type::Bool, tag })
+            },
             Expr::Number(token) => {
                 // TODO: assuming its an i32 for now
                 let Token::Int(_, i) = token else { unreachable!() };
                 let mut frame = self.current_frame()?;
                 let tag = frame.alloc();
 
-                let typ = expected_type.unwrap_or(Type::S32);
+                let typ = if let Some(typ) = expected_type {
+                    if typ.assert_number(ldef!()).is_ok() {
+                        typ
+                    } else {
+                        Type::S32
+                    }
+                } else {
+                    Type::S32
+                };
                 let qtyp = typ.qbe_type();
                 genf!(self, "%.s{tag} ={qtyp} copy {i}");
                 Ok(StackValue{ typ, tag })

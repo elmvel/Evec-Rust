@@ -16,6 +16,7 @@ impl Parser {
         let expr = match token {
             Token::Ident(_, _) => Expr::Ident(token),
             Token::Int(_, _) => Expr::Number(token),
+            Token::True(_) | Token::False(_) => Expr::Bool(token),
             Token::Op(_, '(') => {
                 let lhs = self.parse_expr_bp(0);
                 self.expect(Token::Op(ldef!(), ')'))?;

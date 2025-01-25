@@ -4,12 +4,8 @@ module hello;
 // int main(void) { printf("Hello world!\n"); }
 
 main :: fn() {
-    let x = 69;
-    let y = 420;
-    y = 1337;
-    dbg y;
-
-    let a = 1;
-    let b: u64 = 5;
-    a = b;
+    let b: bool = true;
+    dbg b;
+    let x = false;
+    dbg x;
 }
