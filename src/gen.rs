@@ -315,6 +315,8 @@ impl Generator {
                         
                         let lval = self.emit_expr(*box_lhs, Some(Type::Bool))?;
                         let rval = self.emit_expr(*box_rhs, Some(Type::Bool))?;
+                        lval.typ.assert_bool(lloc)?;
+                        rval.typ.assert_bool(rloc)?;
 
                         let mut frame = self.current_frame()?;
                         let cond = frame.alloc();
@@ -340,6 +342,8 @@ impl Generator {
                         
                         let lval = self.emit_expr(*box_lhs, Some(Type::Bool))?;
                         let rval = self.emit_expr(*box_rhs, Some(Type::Bool))?;
+                        lval.typ.assert_bool(lloc)?;
+                        rval.typ.assert_bool(rloc)?;
 
                         let mut frame = self.current_frame()?;
                         let cond = frame.alloc();

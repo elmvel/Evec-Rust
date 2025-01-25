@@ -122,6 +122,13 @@ impl Type {
         }
     }
 
+    pub fn assert_bool(&self, loc: Location) -> Result<()> {
+        match self {
+            Type::Bool => Ok(()),
+            _ => Err(error!(loc, "Expected boolean")),
+        }
+    }
+
     pub fn unsigned(&self) -> bool {
         match self {
             Type::U64 | Type::U32 | Type::U16 | Type::U8 => true,
