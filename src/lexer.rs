@@ -10,6 +10,7 @@ pub enum Token {
     Ident(Location, String),
     Int(Location, i64),
     Op(Location, char),
+    WideOp(Location, (char, char)),
     Dots(Location),
 
     // Keywords
@@ -42,6 +43,7 @@ impl Token {
             Token::Ident(loc, _) => loc.clone(),
             Token::Int(loc, _) => loc.clone(),
             Token::Op(loc, _) => loc.clone(),
+            Token::WideOp(loc, _) => loc.clone(),
             Token::Dots(loc) => loc.clone(),
             Token::Module(loc) => loc.clone(),
             Token::Fn(loc) => loc.clone(),
@@ -121,7 +123,7 @@ impl Lexer {
             let Some(ch) = iter.next() else { break };
             if ch == ':' && iter.peek().filter(|c| **c == ':').is_some() {
                 iter.next();
-                tokens.push(Token::Op(Location::new(input_path.into(), line, col), 'D'));
+                tokens.push(Token::WideOp(Location::new(input_path.into(), line, col), (':', ':')));
                 col += 2;
                 continue;
             }
@@ -131,6 +133,18 @@ impl Lexer {
                 let _: String = iter::once(ch)
                     .chain(from_fn(|| iter.by_ref().next_if(|s| *s != '\n')))
                     .collect::<String>();
+                continue;
+            }
+            if ch == '&' && iter.peek().filter(|c| **c == '&').is_some() {
+                iter.next();
+                tokens.push(Token::WideOp(Location::new(input_path.into(), line, col), ('&', '&')));
+                col += 2;
+                continue;
+            }
+            if ch == '|' && iter.peek().filter(|c| **c == '|').is_some() {
+                iter.next();
+                tokens.push(Token::WideOp(Location::new(input_path.into(), line, col), ('|', '|')));
+                col += 2;
                 continue;
             }
             

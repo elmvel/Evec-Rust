@@ -42,12 +42,19 @@ type SymbolTable = HashMap<String, StackValue>;
 struct StackFrame {
     var_table: SymbolTable,
     stack_counter: usize,
+    logic_counter: usize,
 }
 
 impl StackFrame {
     pub fn alloc(&mut self) -> usize {
         let i = self.stack_counter;
         self.stack_counter += 1;
+        i
+    }
+
+    pub fn label_logic(&mut self) -> usize {
+        let i = self.logic_counter;
+        self.logic_counter += 1;
         i
     }
 
@@ -254,9 +261,9 @@ impl Generator {
                 genf!(self, "%.s{tag} ={qtyp} copy {i}");
                 Ok(StackValue{ typ, tag })
             },
-            Expr::BinOp(ch, box_lhs, box_rhs) => {
-                match ch {
-                    '+' | '-' | '*' | '/' => {
+            Expr::BinOp(op, box_lhs, box_rhs) => {
+                match op {
+                    Op::Add | Op::Sub | Op::Mul | Op::Div => {
                         let lloc = box_lhs.loc();
                         let rloc = box_rhs.loc();
                         
@@ -270,11 +277,11 @@ impl Generator {
 
                         let qtyp = lval.typ.qbe_type();
 
-                        let instr = match ch {
-                            '+' => "add",
-                            '-' => "sub",
-                            '*' => "mul",
-                            '/' => {
+                        let instr = match op {
+                            Op::Add => "add",
+                            Op::Sub => "sub",
+                            Op::Mul => "mul",
+                            Op::Div => {
                                 if lval.typ.unsigned() {
                                     "udiv"
                                 } else {
@@ -286,7 +293,7 @@ impl Generator {
                         genf!(self, "%.s{tag} ={qtyp} {instr} %.s{}, %.s{}", (lval.tag), (rval.tag));
                         Ok(StackValue{ typ: lval.typ, tag })
                     },
-                    '=' => {
+                    Op::Eq => {
                         // Clone galore
                         let Expr::Ident(Token::Ident(loc, text)) = *box_lhs else { return Err(error!(box_lhs.loc(), "Expected variable")) };
                         let frame = self.current_frame()?;
@@ -302,12 +309,62 @@ impl Generator {
                         frame.symtab_store(text, new.clone());
                         Ok(new)
                     },
+                    Op::AndAnd => {
+                        let lloc = box_lhs.loc();
+                        let rloc = box_rhs.loc();
+                        
+                        let lval = self.emit_expr(*box_lhs, Some(Type::Bool))?;
+                        let rval = self.emit_expr(*box_rhs, Some(Type::Bool))?;
+
+                        let mut frame = self.current_frame()?;
+                        let cond = frame.alloc();
+                        let tag = frame.alloc();
+                        let l = frame.label_logic();
+                        genf!(self, "jnz %.s{}, @l{l}_rhs, @l{l}_false", (lval.tag));
+                        genf!(self, "@l{l}_rhs");
+                        genf!(self, "jnz %.s{}, @l{l}_true, @l{l}_false", (rval.tag));
+
+                        genf!(self, "@l{l}_true");
+                        genf!(self, "%.s{tag} =w copy 1"); // Set false if we jump here
+                        genf!(self, "jmp @l{l}_end");
+
+                        genf!(self, "@l{l}_false");
+                        genf!(self, "%.s{tag} =w copy 0"); // Set false if we jump here
+
+                        genf!(self, "@l{l}_end");
+                        Ok(StackValue{ tag, typ: Type::Bool })
+                    },
+                    Op::OrOr => {
+                        let lloc = box_lhs.loc();
+                        let rloc = box_rhs.loc();
+                        
+                        let lval = self.emit_expr(*box_lhs, Some(Type::Bool))?;
+                        let rval = self.emit_expr(*box_rhs, Some(Type::Bool))?;
+
+                        let mut frame = self.current_frame()?;
+                        let cond = frame.alloc();
+                        let tag = frame.alloc();
+                        let l = frame.label_logic();
+                        genf!(self, "jnz %.s{}, @l{l}_true, @l{l}_rhs", (lval.tag));
+                        genf!(self, "@l{l}_rhs");
+                        genf!(self, "jnz %.s{}, @l{l}_true, @l{l}_false", (rval.tag));
+
+                        genf!(self, "@l{l}_true");
+                        genf!(self, "%.s{tag} =w copy 1"); // Set false if we jump here
+                        genf!(self, "jmp @l{l}_end");
+
+                        genf!(self, "@l{l}_false");
+                        genf!(self, "%.s{tag} =w copy 0"); // Set false if we jump here
+
+                        genf!(self, "@l{l}_end");
+                        Ok(StackValue{ tag, typ: Type::Bool })
+                    },
                     _ => todo!()
                 }
             },
             Expr::UnOp(ch, box_expr) => {
                 match ch {
-                    '-' => {
+                    Op::Sub => {
                         match *box_expr {
                             Expr::Number(token) => {
                                 let Token::Int(_, i) = token else { unreachable!() };
@@ -323,7 +380,7 @@ impl Generator {
                             _ => unreachable!("Unsupported expr"),
                         }
                     },
-                    c => todo!("op `{c}`"),
+                    c => todo!("op `{c:?}`"),
                 }
             },
             Expr::Func(stmts) => {

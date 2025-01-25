@@ -4,8 +4,13 @@ module hello;
 // int main(void) { printf("Hello world!\n"); }
 
 main :: fn() {
-    let b: bool = true;
-    dbg b;
-    let x = false;
-    dbg x;
+    dbg true  && true;
+    dbg true  && false;
+    dbg false && true;
+    dbg false && false;
+    dbg 1111111111;
+    dbg true  || true;
+    dbg true  || false;
+    dbg false || true;
+    dbg false || false;
 }

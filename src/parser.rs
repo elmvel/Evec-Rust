@@ -101,7 +101,7 @@ impl Parser {
     */
     pub fn parse_global(&mut self) -> Result<Global> {
         let Expr::Ident(token) = self.parse_expr_ident()? else { unreachable!() };
-        self.expect(Token::Op(ldef!(), 'D'))?;
+        self.expect(Token::WideOp(ldef!(), (':', ':')))?;
         let expr = self.parse_expr()?;
         Ok(Global::Decl(token, expr))
     }

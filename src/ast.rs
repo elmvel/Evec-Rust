@@ -4,6 +4,52 @@ use crate::lexer::{Token, Location};
 use crate::parser::Result;
 use crate::errors::SyntaxError;
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Op {
+    Add,
+    Sub,
+    Mul,
+    Div,
+    Dot,
+    Eq,
+    Excl,
+    Arr,
+    AndAnd,
+    OrOr,
+    Semi,
+}
+
+impl TryInto<Op> for char {
+    type Error = SyntaxError;
+
+    fn try_into(self) -> std::result::Result<Op, Self::Error> {
+        match self {
+            '+' => Ok(Op::Add),
+            '-' => Ok(Op::Sub),
+            '*' => Ok(Op::Mul),
+            '/' => Ok(Op::Div),
+            '.' => Ok(Op::Dot),
+            '=' => Ok(Op::Eq),
+            '!' => Ok(Op::Excl),
+            '[' => Ok(Op::Arr),
+            ';' => Ok(Op::Semi),
+            c => Err(error_orphan!("Could not convert to op: {c}")),
+        }
+    }
+}
+
+impl TryInto<Op> for (char, char) {
+    type Error = SyntaxError;
+
+    fn try_into(self) -> std::result::Result<Op, Self::Error> {
+        match self {
+            ('&', '&') => Ok(Op::AndAnd),
+            ('|', '|') => Ok(Op::OrOr),
+            c => Err(error_orphan!("Could not convert to op: {c:?}")),
+        }
+    }
+}
+
 #[derive(Debug)]
 pub enum Global {
     DeclModule(Expr), // module main;
@@ -25,8 +71,8 @@ pub enum Expr {
     Path(Token, Box<Expr>), // std::io => (String std) (::) (*Expr(io))
     Number(Token),
     Bool(Token),
-    BinOp(char, Box<Expr>, Box<Expr>),
-    UnOp(char, Box<Expr>),
+    BinOp(Op, Box<Expr>, Box<Expr>),
+    UnOp(Op, Box<Expr>),
     Func(Vec<Stmt>), // Eventually Func(Token, Vec<Param>, RetType, Vec<Stmt>)
 }
 

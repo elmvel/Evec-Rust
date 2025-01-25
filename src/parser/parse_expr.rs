@@ -23,9 +23,9 @@ impl Parser {
                 lhs?
             },
             Token::Op(_, op) => {
-                let ((), r_bp) = prefix_binding_power(op)?;
+                let ((), r_bp) = prefix_binding_power(op.try_into()?)?;
                 let rhs = self.parse_expr_bp(r_bp);
-                Expr::UnOp(op, Box::new(rhs?))
+                Expr::UnOp(op.try_into()?, Box::new(rhs?))
             },
             Token::Fn(loc) => {
                 self.expect(Token::Op(ldef!(), '('))?;
@@ -52,18 +52,19 @@ impl Parser {
             // TODO: the termination condition could potentially not be sufficient in the future
             let op = match self.lexer.peek() {
                 Token::Eof => break,
-                Token::Op(_, op) => op,
+                Token::Op(_, op) => TryInto::<Op>::try_into(op)?,
+                Token::WideOp(_, op) => TryInto::<Op>::try_into(op)?,
                 t => panic!("bad token: {:?}", t),
             };
             
             // Postfix
-            if let Some((l_bp, ())) = postfix_binding_power(op) {
+            if let Some((l_bp, ())) = postfix_binding_power(op.clone()) {
                 if l_bp < min_bp { 
                     break;
                 }
                 self.lexer.next();
                 
-                lhs = if op == '[' {
+                lhs = if op == Op::Arr {
                     let rhs = self.parse_expr_bp(0);
                     assert_eq!(self.lexer.next(), Token::Op(ldef!(), ']'));
                     Expr::BinOp(op, Box::new(lhs), Box::new(rhs?))
@@ -74,7 +75,7 @@ impl Parser {
                 continue;
             }
             
-            if let Some((l_bp, r_bp)) = infix_binding_power(op) {
+            if let Some((l_bp, r_bp)) = infix_binding_power(op.clone()) {
                 if l_bp < min_bp { 
                     break;
                 }
