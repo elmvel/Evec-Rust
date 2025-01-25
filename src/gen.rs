@@ -183,10 +183,13 @@ impl Generator {
                 Ok(())
             },
             Stmt::Let(name, typ, expr) => {
-                let Token::Ident(_, text) = name else { unreachable!() };
+                let Token::Ident(loc, text) = name else { unreachable!() };
                 
                 let val = self.emit_expr(expr, typ)?;
                 let frame = self.current_frame()?;
+                if frame.symtab_lookup(&text, loc.clone()).is_ok() {
+                    return Err(error!(loc, "Redefinition of variable {text} is not allowed!"));
+                }
                 frame.symtab_store(text, val);
                 Ok(())
             },

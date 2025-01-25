@@ -4,41 +4,7 @@ module hello;
 // int main(void) { printf("Hello world!\n"); }
 
 main :: fn() {
-    let a: u64 = 120 / 10;
-    let b: u32 = 120 / 10;
-    let c: u16 = 120 / 10;
-    let d: u8 = 120 / 10;
-    let e: s64 = 120 / 10;
-    let f: s32 = 120 / 10;
-    let g: s16 = 120 / 10;
-    let h: s8 = 120 / 10;
-    let i: s64 = -120 / 10;
-    let j: s32 = -120 / 10;
-    let k: s16 = -120 / 10;
-    let l: s8 = -120 / 10;
-    let m: s64 = 120 / -10;
-    let n: s32 = 120 / -10;
-    let o: s16 = 120 / -10;
-    let p: s8 = 120 / -10;
-    dbg a;
-    dbg b;
-    dbg c;
-    dbg d;
-    dbg e;
-    dbg f;
-    dbg g;
-    dbg h;
-    dbg i;
-    dbg j;
-    dbg k;
-    dbg l;
-    dbg m;
-    dbg n;
-    dbg o;
-    dbg p;
-
-    let x = 3 * (18 + 5);
-    let y = 3 + 500 / 5 + (3 * (500 + 69 + (1337 - 40)));
-    dbg x;
-    dbg y;
+    let x = 69;
+    let y = 420;
+    let y = 1337;
 }
