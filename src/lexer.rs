@@ -117,7 +117,23 @@ impl Lexer {
         // TODO: Rewrite this loop to do multi-token checks
         // do "iter.peek" or maybe just while true and check for
         // multi tokens first.
-        while let Some(ch) = iter.next() {
+        while true {
+            let Some(ch) = iter.next() else { break };
+            if ch == ':' && iter.peek().filter(|c| **c == ':').is_some() {
+                iter.next();
+                tokens.push(Token::Op(Location::new(input_path.into(), line, col), 'D'));
+                col += 2;
+                continue;
+            }
+            if ch == '/' && iter.peek().filter(|c| **c == '/').is_some() {
+                iter.next();
+                col += 2;
+                let _: String = iter::once(ch)
+                    .chain(from_fn(|| iter.by_ref().next_if(|s| *s != '\n')))
+                    .collect::<String>();
+                continue;
+            }
+            
             match ch {
                 '\n' => {
                     line += 1;
@@ -127,55 +143,10 @@ impl Lexer {
                 ch if ch.is_whitespace() => {
                     col += 1;
                 },
-                '/' => {
-                    let next = iter.peek();
-                    if next.is_none() {
-                        let loc = Location::new(input_path.into(), line, col);
-                        tokens.push(Token::Op(loc, '/'));
-                        col += 1;
-                        continue;
-                    }
-
-                    let ch2 = next.unwrap();
-                    if *ch2 != '/' {
-                        let loc = Location::new(input_path.into(), line, col);
-                        tokens.push(Token::Op(loc, '/'));
-                        col += 1;
-                        continue;
-                    }
-
-                    iter.next();
-                    col += 2;
-                    let _: String = iter::once(ch)
-                        .chain(from_fn(|| iter.by_ref().next_if(|s| *s != '\n')))
-                        .collect::<String>();
-                },
                 '+' | '-' | '*' | '/' | '.' | '!' | '(' | ')'
-                    | '[' | ']' | ';' | '{' | '}' | '=' => {
+                    | '[' | ']' | ';' | '{' | '}' | '=' | ':' => {
                         tokens.push(Token::Op(Location::new(input_path.into(), line, col), ch));
                         col += 1;
-                },
-                ':' => {
-                    // Todo: Ugly way to get a multi-token
-                    let next = iter.peek();
-                    if next.is_none() {
-                        let loc = Location::new(input_path.into(), line, col);
-                        tokens.push(Token::Op(loc, ':'));
-                        col += 1;
-                        continue;
-                    }
-
-                    let ch2 = next.unwrap();
-                    if *ch2 != ':' {
-                        let loc = Location::new(input_path.into(), line, col);
-                        tokens.push(Token::Op(loc, ':'));
-                        col += 1;
-                        continue;
-                    }
-
-                    iter.next();
-                    tokens.push(Token::Op(Location::new(input_path.into(), line, col), 'D'));
-                    col += 2;
                 },
                 'a'..='z' | 'A'..='Z' | '_' => {
                     let n: String = iter::once(ch)
