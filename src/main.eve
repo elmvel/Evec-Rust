@@ -6,5 +6,10 @@ module hello;
 main :: fn() {
     let x = 69;
     let y = 420;
-    let y = 1337;
+    y = 1337;
+    dbg y;
+
+    let a = 1;
+    let b: u64 = 5;
+    a = b;
 }

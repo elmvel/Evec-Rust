@@ -29,6 +29,7 @@ impl Parser {
     pub fn parse_stmt(&mut self) -> Result<Stmt> {
         bubble_stmt!(self.parse_stmt_dbg());
         bubble_stmt!(self.parse_stmt_let());
+        bubble_stmt!(self.parse_stmt_expr());
 
         let token = self.lexer.peek();
         match token {
@@ -87,5 +88,11 @@ impl Parser {
         self.expect(Token::Op(ldef!(), ';'))?;
 
         Ok(Some(Stmt::Let(token, typ, expr)))
+    }
+
+    pub fn parse_stmt_expr(&mut self) -> Result<Option<Stmt>> {
+        let expr = self.parse_expr()?;
+        self.expect(Token::Op(ldef!(), ';'))?;
+        Ok(Some(Stmt::Ex(expr)))
     }
 }

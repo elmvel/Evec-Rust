@@ -193,6 +193,10 @@ impl Generator {
                 frame.symtab_store(text, val);
                 Ok(())
             },
+            Stmt::Ex(expr) => {
+                let _ = self.emit_expr(expr, None)?;
+                Ok(())
+            },
             _ => todo!("other statement types")
         }
     }
@@ -250,6 +254,22 @@ impl Generator {
                         };
                         genf!(self, "%.s{tag} ={qtyp} {instr} %.s{}, %.s{}", (lval.tag), (rval.tag));
                         Ok(StackValue{ typ: lval.typ, tag })
+                    },
+                    '=' => {
+                        // Clone galore
+                        let Expr::Ident(Token::Ident(loc, text)) = *box_lhs else { return Err(error!(box_lhs.loc(), "Expected variable")) };
+                        let frame = self.current_frame()?;
+                        let val = frame.symtab_lookup(&text, loc.clone())?;
+                        drop(frame); // Should be safe
+
+                        let new = self.emit_expr(*box_rhs, Some(val.typ.clone()))?;
+                        if val.typ != new.typ {
+                            return Err(error!(loc, "Assignment expected {:?}, got {:?} instead", (val.typ), (new.typ)))
+                        }
+                        
+                        let frame = self.current_frame()?;
+                        frame.symtab_store(text, new.clone());
+                        Ok(new)
                     },
                     _ => todo!()
                 }

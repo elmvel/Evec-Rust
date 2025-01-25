@@ -241,4 +241,8 @@ impl Lexer {
         }
         false
     }
+
+    pub fn has_tokens(&mut self, rtokens: &[Token]) -> bool {
+        self.tokens.ends_with(rtokens)
+    }
 }

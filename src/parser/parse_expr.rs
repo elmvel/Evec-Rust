@@ -22,7 +22,7 @@ impl Parser {
                 lhs?
             },
             Token::Op(_, op) => {
-                let ((), r_bp) = prefix_binding_power(op);
+                let ((), r_bp) = prefix_binding_power(op)?;
                 let rhs = self.parse_expr_bp(r_bp);
                 Expr::UnOp(op, Box::new(rhs?))
             },
@@ -48,6 +48,7 @@ impl Parser {
         // These are term expressions i.e. primary expressions
         let mut lhs = self.parse_expr_term()?;       
         loop {
+            // TODO: the termination condition could potentially not be sufficient in the future
             let op = match self.lexer.peek() {
                 Token::Eof => break,
                 Token::Op(_, op) => op,
