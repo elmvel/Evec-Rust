@@ -4,22 +4,24 @@ module hello;
 // int main(void) { printf("Hello world!\n"); }
 
 main :: fn() {
-    if false then
-    dbg 1;
-    else {
-        dbg 1;
-        dbg 3;
-        dbg 3;
-        dbg 7;
-    }
+    let x = 69;
+    dbg x;
 
+    {
+        let y = 420;
+    }
+    // dbg y; main.eve:13:9: error: No variable exists of name 'y'
+}
+
+
+foo :: fn() {
+    if true then dbg 69;
+}
+
+bar :: fn() {
     if false {
-        if true {
-            dbg 420;
-        } else if 69 == 69 {
-            dbg 101;
-        }
-    } else if -1 < 0 {
-        dbg 0;
+        dbg 420;
+    } else if 69 == 69 {
+        dbg 1337;
     }
 }

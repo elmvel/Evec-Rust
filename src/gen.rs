@@ -41,12 +41,27 @@ type SymbolTable = HashMap<String, StackValue>;
 #[derive(Default)]
 struct StackFrame {
     var_table: SymbolTable,
+}
+
+impl StackFrame {
+    pub fn symtab_store(&mut self, name: String, val: StackValue) {
+        self.var_table.insert(name, val);
+    }
+
+    pub fn symtab_lookup(&mut self, name: &str, loc: Location) -> Result<StackValue> {
+        self.var_table.get(name).cloned().ok_or(error!(loc, "No variable exists of name '{name}'"))
+    }
+}
+
+#[derive(Default)]
+pub struct FunctionContext {
+    frames: Vec<StackFrame>,
     stack_counter: usize,
     logic_counter: usize,
     if_counter: usize,
 }
 
-impl StackFrame {
+impl FunctionContext {
     pub fn alloc(&mut self) -> usize {
         let i = self.stack_counter;
         self.stack_counter += 1;
@@ -63,14 +78,6 @@ impl StackFrame {
         let i = self.if_counter;
         self.if_counter += 1;
         i
-    }
-
-    pub fn symtab_store(&mut self, name: String, val: StackValue) {
-        self.var_table.insert(name, val);
-    }
-
-    pub fn symtab_lookup(&mut self, name: &str, loc: Location) -> Result<StackValue> {
-        self.var_table.get(name).cloned().ok_or(error!(loc, "No variable exists of name '{name}'"))
     }
 }
 
@@ -90,7 +97,7 @@ struct GeneratedModule {
 struct Generator {
     decorated_mod: ParseModule,
     pub generated_mod: GeneratedModule,
-    frames: Vec<StackFrame>,
+    ctx: FunctionContext,
     expected_type: Option<Type>,
 }
 
@@ -99,7 +106,7 @@ impl Generator {
         Self {
             decorated_mod,
             generated_mod: GeneratedModule::default(),
-            frames: Vec::new(),
+            ctx: FunctionContext::default(),
             expected_type: None,
         }
     }
@@ -113,19 +120,19 @@ impl Generator {
     }
 
     fn current_frame(&mut self) -> Result<&mut StackFrame> {
-        let last = self.frames.len() - 1;
-        let Some(frame) = self.frames.get_mut(last) else {
+        let last = self.ctx.frames.len() - 1;
+        let Some(frame) = self.ctx.frames.get_mut(last) else {
             unreachable!("No stack frames!");
         };
         Ok(frame)
     }
 
     fn push_frame(&mut self) {
-        self.frames.push(StackFrame::default());
+        self.ctx.frames.push(StackFrame::default());
     }
 
     fn pop_frame(&mut self) {
-        let _ = self.frames.pop();
+        let _ = self.ctx.frames.pop();
     }
 
     pub fn emit(&mut self) -> Result<()> {
@@ -164,9 +171,8 @@ impl Generator {
 
         genf!(self, "export function w ${text}() {{\n@start");
 
-        self.push_frame();
+        self.ctx = FunctionContext::default();
         self.emit_stmts(stmts)?;
-        self.pop_frame();
         
         genf!(self, "ret 0");
         genf!(self, "}}");
@@ -175,9 +181,11 @@ impl Generator {
 
     pub fn emit_stmts(&mut self, stmts: Vec<Stmt>) -> Result<()> {
         // TODO: handle stack frames in here
+        self.push_frame();
         for stmt in stmts {
             self.emit_stmt(stmt)?;
         }
+        self.pop_frame();
         Ok(())
     }
 
@@ -228,8 +236,7 @@ impl Generator {
             },
             Stmt::If(expr, box_stmt, opt_else) => {
                 let val = self.emit_expr(expr, None)?;
-                let mut frame = self.current_frame()?;
-                let i = frame.label_cond();
+                let i = self.ctx.label_cond();
                 genf!(self, "jnz %.s{}, @i{i}_body, @i{i}_else", (val.tag));
                 genf!(self, "@i{i}_body");
                 self.emit_stmt(*box_stmt)?;
@@ -260,8 +267,7 @@ impl Generator {
                 todo!()
             },
             Expr::Bool(token) => {
-                let mut frame = self.current_frame()?;
-                let tag = frame.alloc();
+                let tag = self.ctx.alloc();
 
                 let b = match token {
                     Token::True(_) => "1",
@@ -275,8 +281,7 @@ impl Generator {
             Expr::Number(token) => {
                 // TODO: assuming its an i32 for now
                 let Token::Int(_, i) = token else { unreachable!() };
-                let mut frame = self.current_frame()?;
-                let tag = frame.alloc();
+                let tag = self.ctx.alloc();
 
                 let typ = if let Some(typ) = expected_type {
                     if typ.assert_number(ldef!()).is_ok() {
@@ -302,8 +307,7 @@ impl Generator {
                         let rval = self.emit_expr(*box_rhs, Some(lval.typ.clone()))?;
                         rval.typ.assert_number(rloc)?;
 
-                        let mut frame = self.current_frame()?;
-                        let tag = frame.alloc();
+                        let tag = self.ctx.alloc();
 
                         let qtyp = lval.typ.qbe_type();
 
@@ -348,10 +352,9 @@ impl Generator {
                         lval.typ.assert_bool(lloc)?;
                         rval.typ.assert_bool(rloc)?;
 
-                        let mut frame = self.current_frame()?;
-                        let cond = frame.alloc();
-                        let tag = frame.alloc();
-                        let l = frame.label_logic();
+                        let cond = self.ctx.alloc();
+                        let tag = self.ctx.alloc();
+                        let l = self.ctx.label_logic();
                         genf!(self, "jnz %.s{}, @l{l}_rhs, @l{l}_false", (lval.tag));
                         genf!(self, "@l{l}_rhs");
                         genf!(self, "jnz %.s{}, @l{l}_true, @l{l}_false", (rval.tag));
@@ -375,10 +378,9 @@ impl Generator {
                         lval.typ.assert_bool(lloc)?;
                         rval.typ.assert_bool(rloc)?;
 
-                        let mut frame = self.current_frame()?;
-                        let cond = frame.alloc();
-                        let tag = frame.alloc();
-                        let l = frame.label_logic();
+                        let cond = self.ctx.alloc();
+                        let tag = self.ctx.alloc();
+                        let l = self.ctx.label_logic();
                         genf!(self, "jnz %.s{}, @l{l}_true, @l{l}_rhs", (lval.tag));
                         genf!(self, "@l{l}_rhs");
                         genf!(self, "jnz %.s{}, @l{l}_true, @l{l}_false", (rval.tag));
@@ -402,8 +404,7 @@ impl Generator {
                         let rval = self.emit_expr(*box_rhs, Some(lval.typ.clone()))?;
                         rval.typ.assert_number(rloc)?;
 
-                        let mut frame = self.current_frame()?;
-                        let tag = frame.alloc();
+                        let tag = self.ctx.alloc();
 
                         let qtyp = lval.typ.qbe_type();
                         let instr = match op {
@@ -435,8 +436,7 @@ impl Generator {
                         match *box_expr {
                             Expr::Number(token) => {
                                 let Token::Int(_, i) = token else { unreachable!() };
-                                let mut frame = self.current_frame()?;
-                                let tag = frame.alloc();
+                                let tag = self.ctx.alloc();
 
                                 let typ = expected_type.unwrap_or(Type::S32);
                                 let qtyp = typ.qbe_type();
