@@ -4,18 +4,18 @@ module hello;
 // int main(void) { printf("Hello world!\n"); }
 
 main :: fn() {
-    // let x = 10;
-    // while true {
-    //     dbg x;
-    //     x = x - 1;
-    //     if x == 5 {
-    //         break;
-    //     }
+    let x = 10;
+    while true {
+        dbg x;
+        x = x - 1;
+        if x == 5 {
+            break;
+        }
 
-    //     if x == 6 {
-    //         break;
-    //     }
-    // }
+        if x == 6 {
+            break;
+        }
+    }
 
     let y = 10;
     while y >= 0 {
