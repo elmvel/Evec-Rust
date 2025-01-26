@@ -11,6 +11,7 @@ pub type Result<T> = std::result::Result<T, SyntaxError>;
 
 pub struct ParseModule {
     pub name: Expr,
+    pub file_stem: String,
     pub globals: Vec<Global>,
 }
 
@@ -44,7 +45,7 @@ impl Parser {
         self.lexer.peek() == Token::Eof
     }
 
-    pub fn parse(&mut self) -> Result<ParseModule> {
+    pub fn parse(&mut self, file_stem: String) -> Result<ParseModule> {
         let Global::DeclModule(name) = self.parse_module_decl()? else { unreachable!() };
         let mut globals = Vec::new();
         
@@ -53,7 +54,7 @@ impl Parser {
             globals.push(global);
         }
 
-        Ok(ParseModule{name, globals})
+        Ok(ParseModule{name, file_stem, globals})
     }
 
     pub fn parse_expr_ident(&mut self) -> Result<Expr> {

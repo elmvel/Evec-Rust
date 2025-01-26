@@ -552,13 +552,14 @@ impl Compiletime {
     pub fn emit(&mut self, options: &BuildOptions) -> Result<()> {
         let mut objs = Vec::new();
         for decorated_mod in self.decorated_mods.drain(..) {
+            let name = decorated_mod.file_stem.clone();
+
             let mut generator = Generator::new(decorated_mod);
             generator.emit()?;
 
             println!("QBE:\n{}", generator.generated_mod.output);
             // TODO: I need some way to preserve file names for qbe output files
 
-            let name = "out";
             let mut file = File::create(&format!("{name}.ssa")).or(Err(error_orphan!("Could not create qbe output file")))?;
             let _ = write!(file, "{}", generator.generated_mod.output);
 

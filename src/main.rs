@@ -1,6 +1,7 @@
 #![allow(warnings)] // for now
 
 use std::process::ExitCode;
+use std::path::Path;
 
 use crate::lexer::Lexer;
 use crate::parser::Parser;
@@ -27,6 +28,8 @@ struct BuildOptions {
 
 // TODO: handle multiple source files even though we technically take in a vector
 fn entry(input_paths: Vec<String>, options: BuildOptions) -> crate::parser::Result<()> {
+    let mut parse_modules = Vec::new();
+    
     for input_path in input_paths {
         let mut lexer = Lexer::new(&input_path).map_err(|e| {
             eprintln!("{e}");
@@ -34,17 +37,20 @@ fn entry(input_paths: Vec<String>, options: BuildOptions) -> crate::parser::Resu
         })?;
         let mut parser = Parser::from(lexer);
 
-        let parse_module = parser.parse().map_err(|e| {
+        let path = Path::new(&input_path).file_stem().unwrap();
+        let parse_module = parser.parse(path.to_str().unwrap().to_string()).map_err(|e| {
             eprintln!("{e}");
             e
         })?;
         //println!("{:?}", parse_module.globals);
-        let mut comptime = Compiletime::new(vec![parse_module]);
-        let _ = comptime.emit(&options).map_err(|e| {
-            eprintln!("{e}");
-            e
-        })?;
+        parse_modules.push(parse_module);
     }
+
+    let mut comptime = Compiletime::new(parse_modules);
+    let _ = comptime.emit(&options).map_err(|e| {
+        eprintln!("{e}");
+        e
+    })?;
     Ok(())
 }
 
