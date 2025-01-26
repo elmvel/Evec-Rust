@@ -79,6 +79,16 @@ impl FunctionContext {
         self.if_counter += 1;
         i
     }
+
+    pub fn lookup(&mut self, name: &str, loc: Location) -> Result<StackValue> {
+        for frame in self.frames.iter_mut().rev() {
+            let result = frame.symtab_lookup(name, loc.clone());
+            if result.is_ok() {
+                return result;
+            }
+        }
+        Err(error!(loc, "No variable exits of name '{name}'"))
+    }
 }
 
 /////////// Runtime ////////////////
@@ -219,6 +229,7 @@ impl Generator {
                     }
                 }
                 
+                // NOTE: This allows shadowing
                 let frame = self.current_frame()?;
                 if frame.symtab_lookup(&text, loc.clone()).is_ok() {
                     return Err(error!(loc, "Redefinition of variable {text} is not allowed!"));
@@ -251,6 +262,19 @@ impl Generator {
                 
                 Ok(())
             },
+            Stmt::While(expr, box_stmt) => {
+                let i = self.ctx.label_cond();
+                genf!(self, "@i{i}_test");
+                let val = self.emit_expr(expr, None)?;
+                genf!(self, "jnz %.s{}, @i{i}_body, @i{i}_exit", (val.tag));
+
+                genf!(self, "@i{i}_body");
+                self.emit_stmt(*box_stmt)?;
+                genf!(self, "jmp @i{i}_test");
+                
+                genf!(self, "@i{i}_exit");
+                Ok(())
+            },
             s => todo!("other statement types: {s:?}")
         }
     }
@@ -259,8 +283,7 @@ impl Generator {
         match expr {
             Expr::Ident(token) => {
                 let Token::Ident(loc, text) = token else { unreachable!() };
-                let frame = self.current_frame()?;
-                let val = frame.symtab_lookup(&text, loc)?;
+                let val = self.ctx.lookup(&text, loc)?;
                 Ok(val)
             },
             Expr::Path(token, box_expr) => {
@@ -330,17 +353,15 @@ impl Generator {
                     Op::Eq => {
                         // Clone galore
                         let Expr::Ident(Token::Ident(loc, text)) = *box_lhs else { return Err(error!(box_lhs.loc(), "Expected variable")) };
-                        let frame = self.current_frame()?;
-                        let val = frame.symtab_lookup(&text, loc.clone())?;
-                        drop(frame); // Should be safe
+                        let val = self.ctx.lookup(&text, loc.clone())?;
 
                         let new = self.emit_expr(*box_rhs, Some(val.typ.clone()))?;
                         if val.typ != new.typ {
                             return Err(error!(loc, "Assignment expected {:?}, got {:?} instead", (val.typ), (new.typ)))
                         }
-                        
-                        let frame = self.current_frame()?;
-                        frame.symtab_store(text, new.clone());
+                        // Redundant but necessary
+                        let qtyp = new.typ.qbe_type();
+                        genf!(self, "%.s{} ={qtyp} copy %.s{}", (val.tag), (new.tag));
                         Ok(new)
                     },
                     Op::AndAnd => {

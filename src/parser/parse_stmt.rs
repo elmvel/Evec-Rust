@@ -31,6 +31,7 @@ impl Parser {
         bubble_stmt!(self.parse_stmt_dbg());
         bubble_stmt!(self.parse_stmt_let());
         bubble_stmt!(self.parse_stmt_if());
+        bubble_stmt!(self.parse_stmt_while());
 
         bubble_stmt!(self.parse_stmt_expr());
 
@@ -129,6 +130,20 @@ impl Parser {
             
             Ok(Some(Stmt::If(expr, Box::new(Stmt::Scope(stmts)), else_block)))
         }
+    }
+
+    /*
+    <stmt.while> ::= 'while' <expr> '{' <stmts> '}'
+    */
+    pub fn parse_stmt_while(&mut self) -> Result<Option<Stmt>> {
+        if !self.lexer.eat(Token::While(ldef!())) {
+            return Ok(None);
+        }
+
+        let expr = self.parse_expr()?;
+        let stmts = self.parse_stmts()?;
+            
+        Ok(Some(Stmt::While(expr, Box::new(Stmt::Scope(stmts)))))
     }
 
     pub fn parse_stmt_expr(&mut self) -> Result<Option<Stmt>> {

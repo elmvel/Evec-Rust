@@ -21,6 +21,7 @@ pub enum Token {
     If(Location),
     Then(Location),
     Else(Location),
+    While(Location),
 
     // Types
     U64(Location),
@@ -55,6 +56,7 @@ impl Token {
             Token::If(loc) => loc.clone(),
             Token::Then(loc) => loc.clone(),
             Token::Else(loc) => loc.clone(),
+            Token::While(loc) => loc.clone(),
             Token::U64(loc) => loc.clone(),
             Token::U32(loc) => loc.clone(),
             Token::U16(loc) => loc.clone(),
@@ -221,6 +223,7 @@ impl Lexer {
             "if" => Token::If(loc),
             "then" => Token::Then(loc),
             "else" => Token::Else(loc),
+            "while" => Token::While(loc),
 
             "u64" => Token::U64(loc),
             "u32" => Token::U32(loc),

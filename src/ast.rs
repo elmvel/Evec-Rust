@@ -85,6 +85,7 @@ pub enum Stmt {
     Scope(Vec<Stmt>),
     Ex(Expr), // C-style: a+b; foo();
     If(Expr, Box<Stmt>, Option<Box<Stmt>>),
+    While(Expr, Box<Stmt>),
 }
 
 #[derive(Debug)]
