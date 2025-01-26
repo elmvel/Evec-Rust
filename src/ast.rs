@@ -14,10 +14,24 @@ pub enum Op {
     Eq,
     Excl,
     Arr,
+    Semi,
     AndAnd,
     OrOr,
     Gt,
-    Semi,
+    Lt,
+    Ge,
+    Le,
+    EqEq,
+    NotEq,
+}
+
+impl Op {
+    pub fn qbe_depends_sign(&self) -> bool {
+        return match self {
+            Op::Gt | Op::Lt | Op::Ge | Op::Le => true,
+            _ => false,
+        };
+    }
 }
 
 impl TryInto<Op> for char {
@@ -35,6 +49,7 @@ impl TryInto<Op> for char {
             '[' => Ok(Op::Arr),
             ';' => Ok(Op::Semi),
             '>' => Ok(Op::Gt),
+            '<' => Ok(Op::Lt),
             c => Err(error_orphan!("Could not convert to op: {c}")),
         }
     }
@@ -47,6 +62,10 @@ impl TryInto<Op> for (char, char) {
         match self {
             ('&', '&') => Ok(Op::AndAnd),
             ('|', '|') => Ok(Op::OrOr),
+            ('>', '=') => Ok(Op::Ge),
+            ('<', '=') => Ok(Op::Le),
+            ('=', '=') => Ok(Op::EqEq),
+            ('!', '=') => Ok(Op::NotEq),
             c => Err(error_orphan!("Could not convert to op: {c:?}")),
         }
     }

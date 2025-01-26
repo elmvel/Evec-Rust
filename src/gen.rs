@@ -363,7 +363,7 @@ impl Generator {
                         genf!(self, "@l{l}_end");
                         Ok(StackValue{ tag, typ: Type::Bool })
                     },
-                    Op::Gt => {
+                    Op::Gt | Op::Lt | Op::Ge | Op::Le | Op::EqEq | Op::NotEq => {
                         let lloc = box_lhs.loc();
                         let rloc = box_rhs.loc();
                         
@@ -376,10 +376,23 @@ impl Generator {
                         let tag = frame.alloc();
 
                         let qtyp = lval.typ.qbe_type();
-                        if lval.typ.unsigned() {
-                            genf!(self, "%.s{tag} =w cugt{qtyp} %.s{}, %.s{}", (lval.tag), (rval.tag));
+                        let instr = match op {
+                            Op::Gt => "gt",
+                            Op::Lt => "lt",
+                            Op::Ge => "ge",
+                            Op::Le => "le",
+                            Op::EqEq => "eq",
+                            Op::NotEq => "ne",
+                            _ => todo!(),
+                        };
+                        if op.qbe_depends_sign() {
+                            if lval.typ.unsigned() {
+                                genf!(self, "%.s{tag} =w cu{instr}{qtyp} %.s{}, %.s{}", (lval.tag), (rval.tag));
+                            } else {
+                                genf!(self, "%.s{tag} =w cs{instr}{qtyp} %.s{}, %.s{}", (lval.tag), (rval.tag));
+                            }
                         } else {
-                            genf!(self, "%.s{tag} =w csgt{qtyp} %.s{}, %.s{}", (lval.tag), (rval.tag));
+                            genf!(self, "%.s{tag} =w c{instr}{qtyp} %.s{}, %.s{}", (lval.tag), (rval.tag));
                         }
                         Ok(StackValue{ tag, typ: Type::Bool })
                     },

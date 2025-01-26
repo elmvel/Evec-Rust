@@ -104,6 +104,16 @@ pub struct Lexer {
     tokens: Vec<Token>,
 }
 
+const WIDE_CHARS: &[(char, char)] = &[
+    (':', ':'),
+    ('&', '&'),
+    ('|', '|'),
+    ('>', '='),
+    ('<', '='),
+    ('=', '='),
+    ('!', '='),
+];
+
 impl Lexer {
     pub fn new(input_path: &str) -> Result<Self, SyntaxError> {
         let Ok(input) = std::fs::read_to_string(input_path) else {
@@ -119,14 +129,8 @@ impl Lexer {
         // TODO: Rewrite this loop to do multi-token checks
         // do "iter.peek" or maybe just while true and check for
         // multi tokens first.
-        while true {
+        'outer: while true {
             let Some(ch) = iter.next() else { break };
-            if ch == ':' && iter.peek().filter(|c| **c == ':').is_some() {
-                iter.next();
-                tokens.push(Token::WideOp(Location::new(input_path.into(), line, col), (':', ':')));
-                col += 2;
-                continue;
-            }
             if ch == '/' && iter.peek().filter(|c| **c == '/').is_some() {
                 iter.next();
                 col += 2;
@@ -135,17 +139,13 @@ impl Lexer {
                     .collect::<String>();
                 continue;
             }
-            if ch == '&' && iter.peek().filter(|c| **c == '&').is_some() {
-                iter.next();
-                tokens.push(Token::WideOp(Location::new(input_path.into(), line, col), ('&', '&')));
-                col += 2;
-                continue;
-            }
-            if ch == '|' && iter.peek().filter(|c| **c == '|').is_some() {
-                iter.next();
-                tokens.push(Token::WideOp(Location::new(input_path.into(), line, col), ('|', '|')));
-                col += 2;
-                continue;
+            for wchar in WIDE_CHARS {
+                if ch == wchar.0 && iter.peek().filter(|c| **c == wchar.1).is_some() {
+                    iter.next();
+                    tokens.push(Token::WideOp(Location::new(input_path.into(), line, col), *wchar));
+                    col += 2;
+                    continue 'outer;
+                }
             }
             
             match ch {
@@ -158,7 +158,8 @@ impl Lexer {
                     col += 1;
                 },
                 '+' | '-' | '*' | '/' | '.' | '!' | '(' | ')' |
-                '[' | ']' | ';' | '{' | '}' | '=' | ':' | '>' => {
+                '[' | ']' | ';' | '{' | '}' | '=' | ':' | '>' |
+                '<' => {
                         tokens.push(Token::Op(Location::new(input_path.into(), line, col), ch));
                         col += 1;
                 },
