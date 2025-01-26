@@ -4,15 +4,25 @@ module hello;
 // int main(void) { printf("Hello world!\n"); }
 
 main :: fn() {
-    let x = 10;
-    while x >= 0 {
-        dbg x;
-        x = x - 1;
-    }
+    // let x = 10;
+    // while true {
+    //     dbg x;
+    //     x = x - 1;
+    //     if x == 5 {
+    //         break;
+    //     }
 
-    {
-        let y = 69;
-        y = 420;
+    //     if x == 6 {
+    //         break;
+    //     }
+    // }
+
+    let y = 10;
+    while y >= 0 {
         dbg y;
+        y = y - 1;
+        if y == 5 {
+            continue; // This is a no-op basically, but it works!
+        }
     }
 }

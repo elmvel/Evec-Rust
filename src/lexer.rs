@@ -22,6 +22,8 @@ pub enum Token {
     Then(Location),
     Else(Location),
     While(Location),
+    Break(Location),
+    Continue(Location),
 
     // Types
     U64(Location),
@@ -57,6 +59,8 @@ impl Token {
             Token::Then(loc) => loc.clone(),
             Token::Else(loc) => loc.clone(),
             Token::While(loc) => loc.clone(),
+            Token::Break(loc) => loc.clone(),
+            Token::Continue(loc) => loc.clone(),
             Token::U64(loc) => loc.clone(),
             Token::U32(loc) => loc.clone(),
             Token::U16(loc) => loc.clone(),
@@ -224,6 +228,8 @@ impl Lexer {
             "then" => Token::Then(loc),
             "else" => Token::Else(loc),
             "while" => Token::While(loc),
+            "break" => Token::Break(loc),
+            "continue" => Token::Continue(loc),
 
             "u64" => Token::U64(loc),
             "u32" => Token::U32(loc),

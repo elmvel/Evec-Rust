@@ -59,6 +59,9 @@ pub struct FunctionContext {
     stack_counter: usize,
     logic_counter: usize,
     if_counter: usize,
+    loop_counter: usize,
+    loop_tracker: usize,
+    stopper_counter: usize, // For when we need a label after a jmp because of qbe restrictions
 }
 
 impl FunctionContext {
@@ -78,6 +81,34 @@ impl FunctionContext {
         let i = self.if_counter;
         self.if_counter += 1;
         i
+    }
+
+    pub fn label_loop(&mut self) -> usize {
+        let i = self.loop_counter;
+        self.loop_counter += 1;
+        i
+    }
+
+    pub fn stopper(&mut self) -> usize {
+        let i = self.stopper_counter;
+        self.stopper_counter += 1;
+        i
+    }
+
+    pub fn current_loop(&self) -> usize {
+        self.loop_counter - 1
+    }
+
+    pub fn loop_push(&mut self) {
+        self.loop_tracker += 1;
+    }
+
+    pub fn loop_pop(&mut self) {
+        self.loop_tracker -= 1;
+    }
+
+    pub fn loop_valid(&self) -> bool {
+        self.loop_tracker > 0
     }
 
     pub fn lookup(&mut self, name: &str, loc: Location) -> Result<StackValue> {
@@ -263,16 +294,44 @@ impl Generator {
                 Ok(())
             },
             Stmt::While(expr, box_stmt) => {
-                let i = self.ctx.label_cond();
-                genf!(self, "@i{i}_test");
-                let val = self.emit_expr(expr, None)?;
-                genf!(self, "jnz %.s{}, @i{i}_body, @i{i}_exit", (val.tag));
-
-                genf!(self, "@i{i}_body");
-                self.emit_stmt(*box_stmt)?;
-                genf!(self, "jmp @i{i}_test");
+                self.ctx.loop_push(); // Allow break/continue
                 
-                genf!(self, "@i{i}_exit");
+                let p = self.ctx.label_loop();
+                genf!(self, "@p{p}_test");
+                let val = self.emit_expr(expr, None)?;
+                genf!(self, "jnz %.s{}, @p{p}_body, @p{p}_exit", (val.tag));
+
+                genf!(self, "@p{p}_body");
+                self.emit_stmt(*box_stmt)?;
+                genf!(self, "jmp @p{p}_test");
+                
+                genf!(self, "@p{p}_exit");
+
+                self.ctx.loop_pop(); // Disallow break/continue
+                Ok(())
+            },
+            Stmt::Break(loc) => {
+                // Get the current block we are in
+                let p = self.ctx.current_loop();
+                if !self.ctx.loop_valid() {
+                    return Err(error!(loc, "No body to break out of!"));
+                }
+                genf!(self, "jmp @p{p}_exit");
+
+                let s = self.ctx.stopper();
+                genf!(self, "@p{p}_stopper{s}");
+                Ok(())
+            },
+            Stmt::Continue(loc) => {
+                // Get the current block we are in
+                let p = self.ctx.current_loop();
+                if !self.ctx.loop_valid() {
+                    return Err(error!(loc, "No body to continue in!"));
+                }
+                genf!(self, "jmp @p{p}_test");
+
+                let s = self.ctx.stopper();
+                genf!(self, "@p{p}_stopper{s}");
                 Ok(())
             },
             s => todo!("other statement types: {s:?}")

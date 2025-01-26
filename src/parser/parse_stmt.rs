@@ -32,6 +32,8 @@ impl Parser {
         bubble_stmt!(self.parse_stmt_let());
         bubble_stmt!(self.parse_stmt_if());
         bubble_stmt!(self.parse_stmt_while());
+        bubble_stmt!(self.parse_stmt_break());
+        bubble_stmt!(self.parse_stmt_continue());
 
         bubble_stmt!(self.parse_stmt_expr());
 
@@ -144,6 +146,30 @@ impl Parser {
         let stmts = self.parse_stmts()?;
             
         Ok(Some(Stmt::While(expr, Box::new(Stmt::Scope(stmts)))))
+    }
+
+    /*
+    <stmt.break> ::= 'break' ';'
+    */
+    pub fn parse_stmt_break(&mut self) -> Result<Option<Stmt>> {
+        if self.lexer.peek() != Token::Break(ldef!()) {
+            return Ok(None);
+        }
+        let Token::Break(loc) = self.lexer.next() else { unreachable!() };
+        self.expect(Token::Op(ldef!(), ';'))?;
+        Ok(Some(Stmt::Break(loc)))
+    }
+
+    /*
+    <stmt.continue> ::= 'continue' ';'
+    */
+    pub fn parse_stmt_continue(&mut self) -> Result<Option<Stmt>> {
+        if self.lexer.peek() != Token::Continue(ldef!()) {
+            return Ok(None);
+        }
+        let Token::Continue(loc) = self.lexer.next() else { unreachable!() };
+        self.expect(Token::Op(ldef!(), ';'))?;
+        Ok(Some(Stmt::Continue(loc)))
     }
 
     pub fn parse_stmt_expr(&mut self) -> Result<Option<Stmt>> {
