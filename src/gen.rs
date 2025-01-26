@@ -4,6 +4,7 @@ use std::io::Write as IoWrite;
 use std::fs::File;
 use std::process::Command;
 
+use crate::BuildOptions;
 use crate::lexer::{Token, Location};
 use crate::parser::ParseModule;
 use crate::parser::Result;
@@ -548,7 +549,7 @@ impl Compiletime {
         }
     }
 
-    pub fn emit(&mut self) -> Result<()> {
+    pub fn emit(&mut self, options: &BuildOptions) -> Result<()> {
         let mut objs = Vec::new();
         for decorated_mod in self.decorated_mods.drain(..) {
             let mut generator = Generator::new(decorated_mod);
@@ -584,11 +585,35 @@ impl Compiletime {
                 return Err(error_orphan!("Failure with getting object file from assembly"));
             }
 
+            if !options.emit_qbe {
+                let path = format!("{name}.ssa");
+                if !Command::new("rm")
+                    .arg(&path)
+                    .status()
+                    .expect("ERROR: rm failed")
+                    .success()
+                {
+                    return Err(error_orphan!("Could not remove file {path}"));
+                }
+            }
+
+            if !options.emit_assembly {
+                let path = format!("{name}.s");
+                if !Command::new("rm")
+                    .arg(&path)
+                    .status()
+                    .expect("ERROR: rm failed")
+                    .success()
+                {
+                    return Err(error_orphan!("Could not remove file {path}"));
+                }
+            }
+
             objs.push(format!("{name}.o"));
         }
 
         if !Command::new("cc")
-            .args(objs)
+            .args(objs.clone())
             .arg("-o")
             .arg("b.out")
             .status()
@@ -596,6 +621,17 @@ impl Compiletime {
             .success()
         {
             return Err(error_orphan!("Failure with linking final executable!"));
+        }
+
+        for path in objs {
+            if !Command::new("rm")
+                .arg(&path)
+                .status()
+                .expect("ERROR: rm failed")
+                .success()
+            {
+                return Err(error_orphan!("Could not remove file {path}"));
+            }
         }
 
         println!("Created executable b.out!");

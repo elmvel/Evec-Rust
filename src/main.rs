@@ -19,39 +19,56 @@ mod gen;
 
 // TODO: very dumb box allocations, but maybe its fine?
 
-fn entry(input_path: String) -> crate::parser::Result<()> {
-    let mut lexer = Lexer::new(&input_path).map_err(|e| {
-        eprintln!("{e}");
-        e
-    })?;
-    let mut parser = Parser::from(lexer);
+#[derive(Default)]
+struct BuildOptions {
+    emit_qbe: bool,
+    emit_assembly: bool,
+}
 
-    let parse_module = parser.parse().map_err(|e| {
-        eprintln!("{e}");
-        e
-    })?;
-    //println!("{:?}", parse_module.globals);
-    let mut comptime = Compiletime::new(vec![parse_module]);
-    let _ = comptime.emit().map_err(|e| {
-        eprintln!("{e}");
-        e
-    })?;
+// TODO: handle multiple source files even though we technically take in a vector
+fn entry(input_paths: Vec<String>, options: BuildOptions) -> crate::parser::Result<()> {
+    for input_path in input_paths {
+        let mut lexer = Lexer::new(&input_path).map_err(|e| {
+            eprintln!("{e}");
+            e
+        })?;
+        let mut parser = Parser::from(lexer);
+
+        let parse_module = parser.parse().map_err(|e| {
+            eprintln!("{e}");
+            e
+        })?;
+        //println!("{:?}", parse_module.globals);
+        let mut comptime = Compiletime::new(vec![parse_module]);
+        let _ = comptime.emit(&options).map_err(|e| {
+            eprintln!("{e}");
+            e
+        })?;
+    }
     Ok(())
 }
 
 fn main() -> ExitCode {
     let mut args = std::env::args();
     let program = args.next().expect("program");
+    let mut options = BuildOptions::default();
 
-    let input_path = if let Some(input_path) = args.next() {
-        input_path
-    } else {
+    let mut input_paths = Vec::new();
+    while let Some(arg) = args.next() {
+        match arg.as_str() {
+            "-ssa" | "--emit-qbe" => options.emit_qbe = true,
+            "-S" | "--emit-asm" => options.emit_assembly = true,
+            arg => input_paths.push(arg.to_string()),
+        }
+    }
+
+    if input_paths.is_empty() {
         eprintln!("Usage: {program} <file.eve>");
         eprintln!("error: no input is provided");
         return ExitCode::FAILURE;
-    };
+    }
 
-    match entry(input_path) {
+    match entry(input_paths, options) {
         Ok(_) => ExitCode::SUCCESS,
         Err(_) => ExitCode::FAILURE,
     }
