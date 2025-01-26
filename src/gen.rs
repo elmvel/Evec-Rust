@@ -43,6 +43,7 @@ struct StackFrame {
     var_table: SymbolTable,
     stack_counter: usize,
     logic_counter: usize,
+    if_counter: usize,
 }
 
 impl StackFrame {
@@ -55,6 +56,12 @@ impl StackFrame {
     pub fn label_logic(&mut self) -> usize {
         let i = self.logic_counter;
         self.logic_counter += 1;
+        i
+    }
+
+    pub fn label_cond(&mut self) -> usize {
+        let i = self.if_counter;
+        self.if_counter += 1;
         i
     }
 
@@ -167,6 +174,7 @@ impl Generator {
     }
 
     pub fn emit_stmts(&mut self, stmts: Vec<Stmt>) -> Result<()> {
+        // TODO: handle stack frames in here
         for stmt in stmts {
             self.emit_stmt(stmt)?;
         }
@@ -210,11 +218,33 @@ impl Generator {
                 frame.symtab_store(text, val);
                 Ok(())
             },
+            Stmt::Scope(stmts) => {
+                self.emit_stmts(stmts)?;
+                Ok(())
+            },
             Stmt::Ex(expr) => {
                 let _ = self.emit_expr(expr, None)?;
                 Ok(())
             },
-            _ => todo!("other statement types")
+            Stmt::If(expr, box_stmt, opt_else) => {
+                let val = self.emit_expr(expr, None)?;
+                let mut frame = self.current_frame()?;
+                let i = frame.label_cond();
+                genf!(self, "jnz %.s{}, @i{i}_body, @i{i}_else", (val.tag));
+                genf!(self, "@i{i}_body");
+                self.emit_stmt(*box_stmt)?;
+                genf!(self, "jmp @i{i}_end");
+                genf!(self, "@i{i}_else");
+
+                if let Some(box_else_block) = opt_else {
+                    self.emit_stmt(*box_else_block)?;
+                }
+
+                genf!(self, "@i{i}_end");
+                
+                Ok(())
+            },
+            s => todo!("other statement types: {s:?}")
         }
     }
 

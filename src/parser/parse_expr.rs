@@ -50,11 +50,20 @@ impl Parser {
         let mut lhs = self.parse_expr_term()?;       
         loop {
             // TODO: the termination condition could potentially not be sufficient in the future
+            // This is 
             let op = match self.lexer.peek() {
                 Token::Eof => break,
-                Token::Op(_, op) => TryInto::<Op>::try_into(op)?,
-                Token::WideOp(_, op) => TryInto::<Op>::try_into(op)?,
-                t => panic!("bad token: {:?}", t),
+                Token::Op(_, op) => {
+                    let conversion = TryInto::<Op>::try_into(op);
+                    if conversion.is_err() { break }
+                    conversion.unwrap()
+                },
+                Token::WideOp(_, op) => {
+                    let conversion = TryInto::<Op>::try_into(op);
+                    if conversion.is_err() { break }
+                    conversion.unwrap()
+                },
+                t => break,
             };
             
             // Postfix

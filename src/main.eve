@@ -4,13 +4,22 @@ module hello;
 // int main(void) { printf("Hello world!\n"); }
 
 main :: fn() {
-    // TODO: check for unsigned vs signed comparisons
-    // TODO: complete all other comparison operators
-    dbg 10 > 1;
-    dbg -1 < 10;
-    dbg 10 > -1;
-    dbg 10 >= 10;
-    dbg 9 <= 10;
-    dbg 69 == 69;
-    dbg 1337 != 420;
+    if false then
+    dbg 1;
+    else {
+        dbg 1;
+        dbg 3;
+        dbg 3;
+        dbg 7;
+    }
+
+    if false {
+        if true {
+            dbg 420;
+        } else if 69 == 69 {
+            dbg 101;
+        }
+    } else if -1 < 0 {
+        dbg 0;
+    }
 }

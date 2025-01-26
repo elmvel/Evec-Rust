@@ -27,8 +27,11 @@ impl Parser {
     }
 
     pub fn parse_stmt(&mut self) -> Result<Stmt> {
+        bubble_stmt!(self.parse_stmt_scope());
         bubble_stmt!(self.parse_stmt_dbg());
         bubble_stmt!(self.parse_stmt_let());
+        bubble_stmt!(self.parse_stmt_if());
+
         bubble_stmt!(self.parse_stmt_expr());
 
         let token = self.lexer.peek();
@@ -39,7 +42,7 @@ impl Parser {
     }
 
     /*
-    <stmt.dbg> = 'dbg' <expr> ';'
+    <stmt.dbg> ::= 'dbg' <expr> ';'
     */
     pub fn parse_stmt_dbg(&mut self) -> Result<Option<Stmt>> {
         if !self.lexer.eat(Token::Dbg(ldef!())) {
@@ -69,8 +72,15 @@ impl Parser {
         Ok(typ)
     }
 
+    pub fn parse_stmt_scope(&mut self) -> Result<Option<Stmt>> {
+        if self.lexer.peek() != Token::Op(ldef!(), '{') {
+            return Ok(None);
+        }
+        Ok(Some(Stmt::Scope(self.parse_stmts()?)))
+    }
+
     /*
-    <stmt.let> = 'let' ID '=' <expr> ';'
+    <stmt.let> ::= 'let' ID '=' <expr> ';'
     */
     pub fn parse_stmt_let(&mut self) -> Result<Option<Stmt>> {
         if !self.lexer.eat(Token::Let(ldef!())) {
@@ -89,6 +99,36 @@ impl Parser {
         self.expect(Token::Op(ldef!(), ';'))?;
 
         Ok(Some(Stmt::Let(token, typ, expr)))
+    }
+
+    /*
+    <stmt.if> ::= 'if' <expr> 'then' <stmt> ';'
+                 | 'if' <expr> '{' <stmts> '}'
+    */
+    pub fn parse_stmt_if(&mut self) -> Result<Option<Stmt>> {
+        if !self.lexer.eat(Token::If(ldef!())) {
+            return Ok(None);
+        }
+
+        let expr = self.parse_expr()?;
+
+        if self.lexer.eat(Token::Then(ldef!())) {
+            let stmt = self.parse_stmt()?;
+
+            let else_block = if self.lexer.eat(Token::Else(ldef!())) {
+                Some(Box::new(self.parse_stmt()?))
+            } else { None };
+
+            Ok(Some(Stmt::If(expr, Box::new(stmt), else_block)))
+        } else {
+            let stmts = self.parse_stmts()?;
+
+            let else_block = if self.lexer.eat(Token::Else(ldef!())) {
+                Some(Box::new(self.parse_stmt()?))
+            } else { None };
+            
+            Ok(Some(Stmt::If(expr, Box::new(Stmt::Scope(stmts)), else_block)))
+        }
     }
 
     pub fn parse_stmt_expr(&mut self) -> Result<Option<Stmt>> {

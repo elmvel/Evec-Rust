@@ -84,6 +84,7 @@ pub enum Stmt {
     Let(Token, Option<Type>, Expr),
     Scope(Vec<Stmt>),
     Ex(Expr), // C-style: a+b; foo();
+    If(Expr, Box<Stmt>, Option<Box<Stmt>>),
 }
 
 #[derive(Debug)]
