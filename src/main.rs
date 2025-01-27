@@ -122,7 +122,7 @@ fn main() -> ExitCode {
 }
 
 fn usage(program: &str) {
-    eprintln!("Usage: {program} [<options> ...] <file.eve> [<file2.eve> ...]");
+    eprintln!("Usage: {program} [<option> ...] <file.eve> [<file2.eve> ...]");
     eprintln!("error: no input is provided");
 }
 
