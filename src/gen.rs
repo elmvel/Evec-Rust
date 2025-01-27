@@ -564,7 +564,9 @@ impl Compiletime {
             let _ = write!(file, "{}", generator.generated_mod.output);
 
             // .ssa -> .s
-            if !Command::new("qbe")
+            let qbe_path = options.qbe_path.clone().unwrap_or("qbe".to_string());
+            if options.verbose_shell { println!("[CMD] {qbe_path} {name}.ssa -o {name}.s") }
+            if !Command::new(&qbe_path)
                 .arg(&format!("{name}.ssa"))
                 .arg("-o")
                 .arg(&format!("{name}.s"))
@@ -576,7 +578,9 @@ impl Compiletime {
             }
 
             // .s -> .o
-            if !Command::new("cc")
+            let assembler_path = options.assembler_path.clone().unwrap_or("cc".to_string());
+            if options.verbose_shell { println!("[CMD] {assembler_path} -c {name}.s") }
+            if !Command::new(&assembler_path)
                 .arg("-c")
                 .arg(&format!("{name}.s"))
                 .status()
@@ -588,6 +592,7 @@ impl Compiletime {
 
             if !options.emit_qbe {
                 let path = format!("{name}.ssa");
+                if options.verbose_shell { println!("[CMD] rm {path}") }
                 if !Command::new("rm")
                     .arg(&path)
                     .status()
@@ -600,6 +605,7 @@ impl Compiletime {
 
             if !options.emit_assembly {
                 let path = format!("{name}.s");
+                if options.verbose_shell { println!("[CMD] rm {path}") }
                 if !Command::new("rm")
                     .arg(&path)
                     .status()
@@ -613,29 +619,39 @@ impl Compiletime {
             objs.push(format!("{name}.o"));
         }
 
-        if !Command::new("cc")
-            .args(objs.clone())
-            .arg("-o")
-            .arg("b.out")
-            .status()
-            .expect("ERROR: qbe not found")
-            .success()
-        {
-            return Err(error_orphan!("Failure with linking final executable!"));
-        }
-
-        for path in objs {
-            if !Command::new("rm")
-                .arg(&path)
+        let output_name = options.output_name.clone().unwrap_or("b.out".to_string());
+        if !options.compile_only {
+            let linker_path = options.linker_path.clone().unwrap_or("cc".to_string());
+            let linker_args = options.linker_arguments.clone();
+            if options.verbose_shell { println!("[CMD] {linker_path} {linker_args:?} {objs:?} -o {output_name}") }
+            if !Command::new(linker_path)
+                .args(linker_args)
+                .args(objs.clone())
+                .arg("-o")
+                .arg(&output_name)
                 .status()
-                .expect("ERROR: rm failed")
+                .expect("ERROR: qbe not found")
                 .success()
             {
-                return Err(error_orphan!("Could not remove file {path}"));
+                return Err(error_orphan!("Failure with linking final executable!"));
             }
+
+            for path in objs {
+                if options.verbose_shell { println!("[CMD] rm {path}") }
+                if !Command::new("rm")
+                    .arg(&path)
+                    .status()
+                    .expect("ERROR: rm failed")
+                    .success()
+                {
+                    return Err(error_orphan!("Could not remove file {path}"));
+                }
+            }
+            println!("Created executable {output_name}!");
+        } else {
+            println!("Created object files!");
         }
 
-        println!("Created executable b.out!");
         Ok(())
     }
 
