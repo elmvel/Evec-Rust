@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fmt::{self, Write};
 use std::io::Write as IoWrite;
 use std::fs::File;
@@ -18,9 +18,7 @@ macro_rules! genf {
     }
 }
 
-struct Module {
-    tmp: i32,
-}
+type Module = HashMap<String, FunctionDecl>;
 
 /////////// Bookkeeping ////////////////
 
@@ -123,11 +121,39 @@ impl FunctionContext {
     }
 }
 
+#[derive(Debug, Default, Clone, PartialEq, Eq, Hash)]
+pub struct FunctionDecl {
+    name: String, //TODO: remove when not needed
+    // args: Vec<Type>,
+    // ret_type: Option<Type>,
+}
+
+impl FunctionDecl {
+    pub fn new(name: String) -> Self {
+        Self { name }
+    }
+}
+
 /////////// Runtime ////////////////
 
 pub struct Compiletime {
-    decorated_mods: Vec<ParseModule>,
     module_map: HashMap<String, Module>,
+    main_defined: bool,
+}
+
+impl Compiletime {
+    pub fn add_module(&mut self, name: String, module: Module) {
+        if self.module_map.get(&name).is_some() {
+            self.module_map.get_mut(&name).unwrap().extend(module.into_iter());
+        } else {
+            self.module_map.insert(name, module);
+        }
+    }
+    
+    pub fn get_module(&self, path: Expr) -> Option<&Module> {
+        let s = path_to_string(path);
+        self.module_map.get(&s)
+    }
 }
 
 #[derive(Default)]
@@ -137,20 +163,66 @@ struct GeneratedModule {
 }
 
 struct Generator {
-    decorated_mod: ParseModule,
+    pub decorated_mod: ParseModule,
     pub generated_mod: GeneratedModule,
     ctx: FunctionContext,
     expected_type: Option<Type>,
+    imports: HashSet<String>,
+}
+
+pub fn path_to_string(expr: Expr) -> String {
+    match expr {
+        Expr::Ident(Token::Ident(_, text)) => text,
+        Expr::Path(Token::Ident(_, text), box_expr) => {
+            let mut t = text.clone();
+            t.push_str("__");
+            t.push_str(&path_to_string(*box_expr));
+            t
+        },
+        _ => unreachable!(),
+    }
+}
+
+fn get_module_name(s: String) -> String {
+    let Some(idx) = s.rfind("__") else { unreachable!() };
+    s[..idx].to_string()
+}
+
+fn get_func_name(s: String) -> String {
+    let Some(i) = s.rfind("__") else { unreachable!() };
+    let idx = i + 2;
+    s[idx..].to_string()
+}
+
+macro_rules! gen_funcall_from_funcdef {
+    ($slf:expr, $modname:expr, $def:expr, $text:expr, $loc:expr) => {
+        if $def.is_some() {
+            let tag = $slf.ctx.alloc();
+            // TODO: track return type
+            let txt = $text;
+            genf!($slf, "%.s{tag} =w call ${}.{txt}()", $modname);
+            //todo!("funcall")
+            Ok(StackValue{tag, typ: Type::Void})
+        } else {
+            // TODO: Look in "imported" modules
+            let txt = $text;
+            return Err(error!($loc, "Could not find function '{txt}'"));
+        }
+    }
 }
 
 impl Generator {
     pub fn new(decorated_mod: ParseModule) -> Self {
-        Self {
+        let name = path_to_string(decorated_mod.name.clone());
+        let mut gen = Self {
             decorated_mod,
             generated_mod: GeneratedModule::default(),
             ctx: FunctionContext::default(),
             expected_type: None,
-        }
+            imports: HashSet::new(),
+        };
+        gen.generated_mod.name = name;
+        gen
     }
 
     fn write(&mut self, text: &str) {
@@ -177,7 +249,21 @@ impl Generator {
         let _ = self.ctx.frames.pop();
     }
 
-    pub fn emit(&mut self) -> Result<()> {
+    fn func_map(&mut self) -> &mut HashMap<String, FunctionDecl> {
+        &mut self.decorated_mod.function_map
+    }
+
+    fn import_lookup<'a>(&mut self, comptime: &'a Compiletime, modname: &str) -> Option<&'a Module> {
+        // No-op except for ? operator
+        let imported_name = self.imports.get(modname)?;
+        comptime.module_map.get(modname)
+    }
+
+    fn import(&mut self, comptime: &Compiletime, modname: &str) {
+        
+    }
+
+    pub fn emit(&mut self, comptime: &mut Compiletime) -> Result<()> {
         // TODO: set the name field of the gen module
         self.writeln("# QBE Start");
         genf!(self, "data $fmt_d = {{ b \"%d\\n\", b 0 }}");
@@ -189,52 +275,73 @@ impl Generator {
         self.decorated_mod.globals.reverse();
         while !self.decorated_mod.globals.is_empty() {
             let global = self.decorated_mod.globals.pop().unwrap();
-            self.emit_global(global)?;
+            self.emit_global(comptime, global)?;
         }
         Ok(())
     }
 
-    pub fn emit_global(&mut self, global: Global) -> Result<()> {
+    pub fn emit_global(&mut self, comptime: &mut Compiletime, global: Global) -> Result<()> {
         match global {
             Global::Decl(name, expr) => {
                 let Expr::Func(stmts) = expr else {
                     return Err(error!(name.loc(), "Only global functions are supported for now!"));
                 };
-                self.emit_function(name, stmts)
+                let Token::Ident(_, text) = name.clone() else { unreachable!() };
+                self.func_map().insert(text.clone(), FunctionDecl::new(text));
+                self.emit_function(comptime, name, stmts)
+            },
+            Global::Import(expr) => {
+                let loc = expr.loc();
+                let modname = path_to_string(expr);
+                if comptime.module_map.get(&modname).is_none() {
+                    // TODO: prettier module name
+                    return Err(error!(loc, "Module `{modname}` does not exist!"));
+                }
+                self.imports.insert(modname);
+                Ok(())
             },
             g => Err(error_orphan!("Unknown global {g:?}"))
         }
     }
 
-    pub fn emit_function(&mut self, name: Token, stmts: Vec<Stmt>) -> Result<()> {
-        let Token::Ident(_, text) = name else {
+    pub fn emit_function(&mut self, comptime: &mut Compiletime, name: Token, stmts: Vec<Stmt>) -> Result<()> {
+        let Token::Ident(loc, text) = name else {
             unreachable!("must have an ident here")
         };
 
-        genf!(self, "export function w ${text}() {{\n@start");
+        // TODO: clearly define main semantics
+        if &text == "main" {
+            if comptime.main_defined {
+                return Err(error!(loc, "Redefinition of function main!"));
+            }
+            genf!(self, "export function w $main() {{\n@start");
+            comptime.main_defined = true;
+        } else {
+            genf!(self, "export function w ${}.{text}() {{\n@start", (self.generated_mod.name));
+        }
 
         self.ctx = FunctionContext::default();
-        self.emit_stmts(stmts)?;
+        self.emit_stmts(comptime, stmts)?;
         
         genf!(self, "ret 0");
         genf!(self, "}}");
         Ok(())
     }
 
-    pub fn emit_stmts(&mut self, stmts: Vec<Stmt>) -> Result<()> {
+    pub fn emit_stmts(&mut self, comptime: &mut Compiletime, stmts: Vec<Stmt>) -> Result<()> {
         // TODO: handle stack frames in here
         self.push_frame();
         for stmt in stmts {
-            self.emit_stmt(stmt)?;
+            self.emit_stmt(comptime, stmt)?;
         }
         self.pop_frame();
         Ok(())
     }
 
-    pub fn emit_stmt(&mut self, stmt: Stmt) -> Result<()> {
+    pub fn emit_stmt(&mut self, comptime: &mut Compiletime, stmt: Stmt) -> Result<()> {
         match stmt {
             Stmt::Dbg(expr) => {
-                let val = self.emit_expr(expr, None)?;
+                let val = self.emit_expr(comptime, expr, None)?;
 
                 match val.typ {
                     Type::U64 | Type::S64 => {
@@ -246,7 +353,8 @@ impl Generator {
                     },
                     Type::Bool => {
                         genf!(self, "%.void =w call $printf(l $fmt_bool, ..., w %.s{})", val);
-                    }
+                    },
+                    Type::Void => unreachable!(),
                 }
                 // TODO: match on stackvalue's type
                 Ok(())
@@ -254,7 +362,7 @@ impl Generator {
             Stmt::Let(name, typ, expr) => {
                 let Token::Ident(loc, text) = name else { unreachable!() };
                 
-                let val = self.emit_expr(expr, typ.clone())?;
+                let val = self.emit_expr(comptime, expr, typ.clone())?;
                 if let Some(expected_type) = typ {
                     if val.typ != expected_type {
                         return Err(error!(loc, "Expected type {expected_type:?}, but got {:?} instead", (val.typ)));
@@ -270,24 +378,24 @@ impl Generator {
                 Ok(())
             },
             Stmt::Scope(stmts) => {
-                self.emit_stmts(stmts)?;
+                self.emit_stmts(comptime, stmts)?;
                 Ok(())
             },
             Stmt::Ex(expr) => {
-                let _ = self.emit_expr(expr, None)?;
+                let _ = self.emit_expr(comptime, expr, None)?;
                 Ok(())
             },
             Stmt::If(expr, box_stmt, opt_else) => {
-                let val = self.emit_expr(expr, None)?;
+                let val = self.emit_expr(comptime, expr, None)?;
                 let i = self.ctx.label_cond();
                 genf!(self, "jnz %.s{}, @i{i}_body, @i{i}_else", (val.tag));
                 genf!(self, "@i{i}_body");
-                self.emit_stmt(*box_stmt)?;
+                self.emit_stmt(comptime, *box_stmt)?;
                 genf!(self, "jmp @i{i}_end");
                 genf!(self, "@i{i}_else");
 
                 if let Some(box_else_block) = opt_else {
-                    self.emit_stmt(*box_else_block)?;
+                    self.emit_stmt(comptime, *box_else_block)?;
                 }
 
                 genf!(self, "@i{i}_end");
@@ -299,11 +407,11 @@ impl Generator {
                 
                 let p = self.ctx.label_loop();
                 genf!(self, "@p{p}_test");
-                let val = self.emit_expr(expr, None)?;
+                let val = self.emit_expr(comptime, expr, None)?;
                 genf!(self, "jnz %.s{}, @p{p}_body, @p{p}_exit", (val.tag));
 
                 genf!(self, "@p{p}_body");
-                self.emit_stmt(*box_stmt)?;
+                self.emit_stmt(comptime, *box_stmt)?;
                 genf!(self, "jmp @p{p}_test");
                 
                 genf!(self, "@p{p}_exit");
@@ -339,7 +447,7 @@ impl Generator {
         }
     }
 
-    pub fn emit_expr(&mut self, expr: Expr, expected_type: Option<Type>) -> Result<StackValue> {
+    pub fn emit_expr(&mut self, comptime: &mut Compiletime, expr: Expr, expected_type: Option<Type>) -> Result<StackValue> {
         match expr {
             Expr::Ident(token) => {
                 let Token::Ident(loc, text) = token else { unreachable!() };
@@ -385,9 +493,9 @@ impl Generator {
                         let lloc = box_lhs.loc();
                         let rloc = box_rhs.loc();
                         
-                        let lval = self.emit_expr(*box_lhs, expected_type)?;
+                        let lval = self.emit_expr(comptime, *box_lhs, expected_type)?;
                         lval.typ.assert_number(lloc)?;
-                        let rval = self.emit_expr(*box_rhs, Some(lval.typ.clone()))?;
+                        let rval = self.emit_expr(comptime, *box_rhs, Some(lval.typ.clone()))?;
                         rval.typ.assert_number(rloc)?;
 
                         let tag = self.ctx.alloc();
@@ -415,7 +523,7 @@ impl Generator {
                         let Expr::Ident(Token::Ident(loc, text)) = *box_lhs else { return Err(error!(box_lhs.loc(), "Expected variable")) };
                         let val = self.ctx.lookup(&text, loc.clone())?;
 
-                        let new = self.emit_expr(*box_rhs, Some(val.typ.clone()))?;
+                        let new = self.emit_expr(comptime, *box_rhs, Some(val.typ.clone()))?;
                         if val.typ != new.typ {
                             return Err(error!(loc, "Assignment expected {:?}, got {:?} instead", (val.typ), (new.typ)))
                         }
@@ -428,8 +536,8 @@ impl Generator {
                         let lloc = box_lhs.loc();
                         let rloc = box_rhs.loc();
                         
-                        let lval = self.emit_expr(*box_lhs, Some(Type::Bool))?;
-                        let rval = self.emit_expr(*box_rhs, Some(Type::Bool))?;
+                        let lval = self.emit_expr(comptime, *box_lhs, Some(Type::Bool))?;
+                        let rval = self.emit_expr(comptime, *box_rhs, Some(Type::Bool))?;
                         lval.typ.assert_bool(lloc)?;
                         rval.typ.assert_bool(rloc)?;
 
@@ -454,8 +562,8 @@ impl Generator {
                         let lloc = box_lhs.loc();
                         let rloc = box_rhs.loc();
                         
-                        let lval = self.emit_expr(*box_lhs, Some(Type::Bool))?;
-                        let rval = self.emit_expr(*box_rhs, Some(Type::Bool))?;
+                        let lval = self.emit_expr(comptime, *box_lhs, Some(Type::Bool))?;
+                        let rval = self.emit_expr(comptime, *box_rhs, Some(Type::Bool))?;
                         lval.typ.assert_bool(lloc)?;
                         rval.typ.assert_bool(rloc)?;
 
@@ -480,9 +588,9 @@ impl Generator {
                         let lloc = box_lhs.loc();
                         let rloc = box_rhs.loc();
                         
-                        let lval = self.emit_expr(*box_lhs, expected_type)?;
+                        let lval = self.emit_expr(comptime, *box_lhs, expected_type)?;
                         lval.typ.assert_number(lloc)?;
-                        let rval = self.emit_expr(*box_rhs, Some(lval.typ.clone()))?;
+                        let rval = self.emit_expr(comptime, *box_rhs, Some(lval.typ.clone()))?;
                         rval.typ.assert_number(rloc)?;
 
                         let tag = self.ctx.alloc();
@@ -534,28 +642,57 @@ impl Generator {
             Expr::Func(stmts) => {
                 unreachable!("TBD: Should I put emit_function in here?")
             },
+            Expr::Call(box_expr) => {
+                match *box_expr {
+                    Expr::Ident(token) => {
+                        //todo!("work on module resolution and maybe return types");
+                        let Token::Ident(loc, text) = token else { unreachable!() };
+                        let local_func = self.func_map().get(&text);
+                        gen_funcall_from_funcdef!(self, (self.generated_mod.name),local_func, &text, loc)
+                    },
+                    Expr::Path(token, box_expr) => {
+                        // todo!("module resolution: make sure function maps get moved into Compiletime for module resolution lookup. This should be the library for which the 'import' statement can be moved into the Generator function map (I might need to make another structure which contains a global map and also a map of imported modules (key is the full path))")
+                        let loc = token.loc();
+                        let path = path_to_string(Expr::Path(token, box_expr));
+                        let modname = get_module_name(path.clone());
+                        if let Some(module) = self.import_lookup(comptime, &modname) {
+                            let func_name = get_func_name(path);
+                            let imported_func = module.get(&func_name);
+                            gen_funcall_from_funcdef!(self, modname, imported_func, &func_name, loc)
+                        } else {
+                            // TODO: Nicer name printing here
+                            return Err(error!(loc, "Unknown path `{modname}`"));
+                        }
+                    },
+                    _ => return Err(error_orphan!("Got a function call without an identifier")),
+                }
+            },
         }
     }
 
-    // fn 
 }
+
 
 impl Compiletime {
     // TODO: accept buildoptions in the future
-    pub fn new(decorated_mods: Vec<ParseModule>) -> Self {
+    pub fn new() -> Self {
         Self {
-            decorated_mods,
             module_map: HashMap::new(),
+            main_defined: false,
         }
     }
 
-    pub fn emit(&mut self, options: &BuildOptions) -> Result<()> {
+    pub fn emit(&mut self, mut decorated_mods: Vec<ParseModule>, options: &BuildOptions) -> Result<()> {
         let mut objs = Vec::new();
-        for decorated_mod in self.decorated_mods.drain(..) {
+        for decorated_mod in &decorated_mods {
+            let name = decorated_mod.file_stem.clone();
+            self.add_module(name, decorated_mod.function_map.clone());
+        }
+        for decorated_mod in decorated_mods.drain(..) {
             let name = decorated_mod.file_stem.clone();
 
             let mut generator = Generator::new(decorated_mod);
-            generator.emit()?;
+            generator.emit(self)?;
 
             println!("QBE:\n{}", generator.generated_mod.output);
             // TODO: I need some way to preserve file names for qbe output files
@@ -611,6 +748,7 @@ impl Compiletime {
             }
 
             objs.push(format!("{name}.o"));
+            self.add_module(generator.generated_mod.name, generator.decorated_mod.function_map);
         }
 
         if !Command::new("cc")

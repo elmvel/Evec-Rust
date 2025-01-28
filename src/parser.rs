@@ -1,8 +1,11 @@
+use std::collections::HashMap;
+
 use crate::lexer::{Lexer, Token, Location};
 use crate::ast::*;
 
 use crate::precedence::*;
 use crate::errors::SyntaxError;
+use crate::gen::FunctionDecl;
 
 mod parse_expr;
 mod parse_stmt;
@@ -13,10 +16,12 @@ pub struct ParseModule {
     pub name: Expr,
     pub file_stem: String,
     pub globals: Vec<Global>,
+    pub function_map: HashMap<String, FunctionDecl>,
 }
 
 pub struct Parser {
     lexer: Lexer,
+    function_map: HashMap<String, FunctionDecl>,
 }
 
 // Welcome home :/
@@ -27,7 +32,7 @@ pub struct Parser {
 // between types
 impl Parser {
     pub fn from(lexer: Lexer) -> Self {
-        Self { lexer }
+        Self { lexer, function_map: HashMap::new() }
     }
 
     fn expect(&mut self, token: Token) -> Result<()> {
@@ -50,11 +55,15 @@ impl Parser {
         let mut globals = Vec::new();
         
         while !self.eof() {
-            let global = self.parse_global()?;
-            globals.push(global);
+            if let Some(import) = self.parse_import()? {
+                globals.push(import);
+            } else {
+                let global = self.parse_global()?;
+                globals.push(global);
+            }
         }
 
-        Ok(ParseModule{name, file_stem, globals})
+        Ok(ParseModule{name, file_stem, globals, function_map: self.function_map.clone()})
     }
 
     pub fn parse_expr_ident(&mut self) -> Result<Expr> {
@@ -71,7 +80,7 @@ impl Parser {
     
     pub fn parse_expr_path(&mut self) -> Result<Expr> {
         let mut path = self.parse_expr_ident()?;
-        while let Token::Op(_, 'D') = self.lexer.peek() {
+        while let Token::WideOp(_, (':', ':')) = self.lexer.peek() {
             self.lexer.next();
 
             let Expr::Ident(token) = path else { unreachable!() };
@@ -98,12 +107,32 @@ impl Parser {
     }
 
     /*
+    <global.import> ::= 'import' <expr.path> ';'
+    */
+    pub fn parse_import(&mut self) -> Result<Option<Global>> {
+        if !self.lexer.eat(Token::Import(ldef!())) {
+            return Ok(None);
+        }
+
+        let import = Global::Import(self.parse_expr_path()?);
+        self.expect(Token::Op(ldef!(), ';'))?;
+        Ok(Some(import))
+    }
+
+    /*
     <global> ::= ID '::' <expr>
     */
     pub fn parse_global(&mut self) -> Result<Global> {
         let Expr::Ident(token) = self.parse_expr_ident()? else { unreachable!() };
         self.expect(Token::WideOp(ldef!(), (':', ':')))?;
         let expr = self.parse_expr()?;
-        Ok(Global::Decl(token, expr))
+        
+        if let Expr::Func(stmts) = expr {
+            let Token::Ident(_, text) = token.clone() else { unreachable!() };
+            self.function_map.insert(text.clone(), FunctionDecl::new(text));
+            Ok(Global::Decl(token, Expr::Func(stmts)))
+        } else {
+            Ok(Global::Decl(token, expr))
+        }
     }
 }

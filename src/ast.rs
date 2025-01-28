@@ -78,7 +78,7 @@ pub enum Global {
     Decl(Token, Expr), // main :: <expr> \ main :: fn() { ... }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Stmt {
     Dbg(Expr),
     Let(Token, Option<Type>, Expr),
@@ -90,7 +90,7 @@ pub enum Stmt {
     Continue(Location),
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Expr {
     Ident(Token), // foo
     Path(Token, Box<Expr>), // std::io => (String std) (::) (*Expr(io))
@@ -99,6 +99,7 @@ pub enum Expr {
     BinOp(Op, Box<Expr>, Box<Expr>),
     UnOp(Op, Box<Expr>),
     Func(Vec<Stmt>), // Eventually Func(Token, Vec<Param>, RetType, Vec<Stmt>)
+    Call(Box<Expr>), // TODO: add parameters
 }
 
 impl Expr {
@@ -111,12 +112,14 @@ impl Expr {
             Expr::BinOp(_, lhs, _) => lhs.loc(),
             Expr::UnOp(_, expr) => expr.loc(),
             Expr::Func(_) => todo!(),
+            Expr::Call(t) => t.loc(),
         }
     }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Type {
+    Void,
     U64,
     U32,
     U16,
@@ -135,7 +138,7 @@ impl Type {
             Type::U32 | Type::U16 | Type::U8 => "w",
             Type::S64 => "l",
             Type::S32 | Type::S16 | Type::S8 => "w",
-            Type::Bool => "w",
+            Type::Void | Type::Bool => "w",
         }
     }
 

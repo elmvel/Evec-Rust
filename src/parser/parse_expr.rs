@@ -11,36 +11,52 @@ impl Parser {
         self.parse_expr_bp(0) 
     }
 
-    pub fn parse_expr_term(&mut self) -> Result<Expr> {
-        let token = self.lexer.next();
-        let expr = match token {
-            Token::Ident(_, _) => Expr::Ident(token),
-            Token::Int(_, _) => Expr::Number(token),
-            Token::True(_) | Token::False(_) => Expr::Bool(token),
-            Token::Op(_, '(') => {
-                let lhs = self.parse_expr_bp(0);
-                self.expect(Token::Op(ldef!(), ')'))?;
-                lhs?
-            },
-            Token::Op(_, op) => {
-                let ((), r_bp) = prefix_binding_power(op.try_into()?)?;
-                let rhs = self.parse_expr_bp(r_bp);
-                Expr::UnOp(op.try_into()?, Box::new(rhs?))
-            },
-            Token::Fn(loc) => {
-                self.expect(Token::Op(ldef!(), '('))?;
-                // TODO: params
-                self.expect(Token::Op(ldef!(), ')'))?;
-                // TODO: return type
+    pub fn parse_expr_funcall(&mut self) -> Option<Expr> {
+        let path = self.parse_expr_path().ok()?;
+        if let Token::Op(_, '(') = self.lexer.peek() {
+            self.lexer.next();
+            // TODO: handle arguments
+            self.expect(Token::Op(ldef!(), ')'));
+            return Some(Expr::Call(Box::new(path)));
+        }
+        Some(path)
+    }
 
-                if self.lexer.peek() != Token::Op(ldef!(), '{') {
-                    return Err(error!(loc, "Missing function body"));
-                }
-                let stmts = self.parse_stmts()?;
-                Expr::Func(stmts)
-            },
-            Token::Eof => Err(error_orphan!("Could not parse expr term from end-of-file"))?,
-            t => Err(error!(t.loc(), "Could not parse expr term from {t:?}"))?,
+    pub fn parse_expr_term(&mut self) -> Result<Expr> {
+        //todo!("Implement parsing function call term here (it may also support a path too, so make sure to have a match case in the gen.rs)");
+        let expr = if let Some(call) = self.parse_expr_funcall() {
+            call
+        } else {
+            let token = self.lexer.next();
+            match token {
+                Token::Ident(_, _) => Expr::Ident(token),
+                Token::Int(_, _) => Expr::Number(token),
+                Token::True(_) | Token::False(_) => Expr::Bool(token),
+                Token::Op(_, '(') => {
+                    let lhs = self.parse_expr_bp(0);
+                    self.expect(Token::Op(ldef!(), ')'))?;
+                    lhs?
+                },
+                Token::Op(_, op) => {
+                    let ((), r_bp) = prefix_binding_power(op.try_into()?)?;
+                    let rhs = self.parse_expr_bp(r_bp);
+                    Expr::UnOp(op.try_into()?, Box::new(rhs?))
+                },
+                Token::Fn(loc) => {
+                    self.expect(Token::Op(ldef!(), '('))?;
+                    // TODO: params
+                    self.expect(Token::Op(ldef!(), ')'))?;
+                    // TODO: return type
+
+                    if self.lexer.peek() != Token::Op(ldef!(), '{') {
+                        return Err(error!(loc, "Missing function body"));
+                    }
+                    let stmts = self.parse_stmts()?;
+                    Expr::Func(stmts)
+                },
+                Token::Eof => Err(error_orphan!("Could not parse expr term from end-of-file"))?,
+                t => Err(error!(t.loc(), "Could not parse expr term from {t:?}"))?,
+            }
         };
         Ok(expr)
     }

@@ -15,6 +15,7 @@ pub enum Token {
 
     // Keywords
     Module(Location),
+    Import(Location),
     Fn(Location),
     Dbg(Location),
     Let(Location),
@@ -52,6 +53,7 @@ impl Token {
             Token::WideOp(loc, _) => loc.clone(),
             Token::Dots(loc) => loc.clone(),
             Token::Module(loc) => loc.clone(),
+            Token::Import(loc) => loc.clone(),
             Token::Fn(loc) => loc.clone(),
             Token::Dbg(loc) => loc.clone(),
             Token::Let(loc) => loc.clone(),
@@ -221,6 +223,7 @@ impl Lexer {
     fn add_ident(id: String, tokens: &mut Vec<Token>, loc: Location) {
         let token = match &id[..] {
             "module" => Token::Module(loc),
+            "import" => Token::Import(loc),
             "fn" => Token::Fn(loc),
             "dbg" => Token::Dbg(loc),
             "let" => Token::Let(loc),

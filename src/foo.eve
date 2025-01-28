@@ -1,0 +1,11 @@
+module foo;
+
+foo :: fn() {
+    dbg 1337;
+}
+
+add :: fn() {
+    let x: u32 = 390;
+    let y: u32 = 30;
+    dbg x + y;
+}

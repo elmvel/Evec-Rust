@@ -46,8 +46,8 @@ fn entry(input_paths: Vec<String>, options: BuildOptions) -> crate::parser::Resu
         parse_modules.push(parse_module);
     }
 
-    let mut comptime = Compiletime::new(parse_modules);
-    let _ = comptime.emit(&options).map_err(|e| {
+    let mut comptime = Compiletime::new();
+    let _ = comptime.emit(parse_modules, &options).map_err(|e| {
         eprintln!("{e}");
         e
     })?;
