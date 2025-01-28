@@ -136,7 +136,7 @@ fn print_help(program: &str) {
     println!("  -h, --help                Print this help page.");
     println!("  -o                        Sets the executable name.");
     println!("  -c                        Only compile, do not link.");
-    println!("  -vs, --verbose shell      Show shell commands run by the compiler.");
+    println!("  -vs, --verbose-shell      Show shell commands run by the compiler.");
     println!("  --assembler               Sets the assembler (default: cc).");
     println!("  -Z, --linker-path         Sets the linker (default: cc).");
     println!("  -z, --linker-arg          Forward an argument to the linker (default: cc).");
