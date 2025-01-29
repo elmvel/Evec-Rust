@@ -6,9 +6,5 @@ edition = "2021"
 [[bin]]
 name = "main"
 path = "./src/main.rs"
-    
-[[bin]]
-name = "sexpr"
-path = "./src/sexpr.rs"
 
 [dependencies]
