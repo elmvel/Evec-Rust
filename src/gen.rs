@@ -694,9 +694,6 @@ impl Compiletime {
             let mut generator = Generator::new(decorated_mod);
             generator.emit(self)?;
 
-            println!("QBE:\n{}", generator.generated_mod.output);
-            // TODO: I need some way to preserve file names for qbe output files
-
             let mut file = File::create(&format!("{name}.ssa")).or(Err(error_orphan!("Could not create qbe output file")))?;
             let _ = write!(file, "{}", generator.generated_mod.output);
 
