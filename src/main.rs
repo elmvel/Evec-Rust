@@ -61,7 +61,6 @@ fn entry(input_paths: Vec<String>, options: BuildOptions) -> crate::parser::Resu
             eprintln!("{e}");
             e
         })?;
-        //println!("{:?}", parse_module.globals);
         parse_modules.push(parse_module);
     }
 
@@ -105,7 +104,6 @@ fn main() -> ExitCode {
             "-Q" | "--qbe-path" => {
                 expect_argument!(args, arg, options.qbe_path);
             },
-            // TODO: qbe path: -Q
             arg => input_paths.push(arg.to_string()),
         }
     }

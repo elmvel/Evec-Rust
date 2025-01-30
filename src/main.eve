@@ -9,7 +9,7 @@ import std::io::foo;
 main :: fn() {
     foo();
     io::foo::blah();
-    foo::add();
+    std::foo::add();
 }
 
 foo :: fn() {

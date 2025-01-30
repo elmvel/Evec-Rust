@@ -259,6 +259,7 @@ impl Generator {
         comptime.module_map.get(modname)
     }
 
+    // TODO: make more performant
     fn import_lookup_fuzzy<'a>(&mut self, comptime: &'a Compiletime, modname: &str) -> Option<(&'a Module, String)> {
         let mut matches = self.imports.iter()
             .filter(|imp| imp.ends_with(modname))
