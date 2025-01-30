@@ -10,3 +10,10 @@ macro_rules! error_orphan {
         SyntaxError::new(None, format!($($l),+))
     }
 }
+
+macro_rules! warn {
+    ($($l:tt),+) => {
+        eprint!("warning: ");
+        eprintln!($($l),+);
+    }
+}

@@ -259,6 +259,25 @@ impl Generator {
         comptime.module_map.get(modname)
     }
 
+    fn import_lookup_fuzzy<'a>(&mut self, comptime: &'a Compiletime, modname: &str) -> Option<(&'a Module, String)> {
+        let mut matches = self.imports.iter()
+            .filter(|imp| imp.ends_with(modname))
+            .map(|imp| imp.clone())
+            .collect::<Vec<String>>();
+        matches.sort_by_key(|imp| imp.len());
+
+        if matches.is_empty() {
+            return None;
+        }
+
+        if matches.len() > 1 {
+            warn!("Ambiguous path `{modname}`, choosing the first one...");
+        }
+
+        let name = &matches[0];
+        Some((comptime.module_map.get(name)?, matches.remove(0)))
+    }
+
     fn import(&mut self, comptime: &Compiletime, modname: &str) {
         
     }
@@ -660,8 +679,14 @@ impl Generator {
                             let imported_func = module.get(&func_name);
                             gen_funcall_from_funcdef!(self, modname, imported_func, &func_name, loc)
                         } else {
-                            // TODO: Nicer name printing here
-                            return Err(error!(loc, "Unknown path `{modname}`"));
+                            if let Some((module, absolute_name)) = self.import_lookup_fuzzy(comptime, &modname) {
+                                let func_name = get_func_name(path);
+                                let imported_func = module.get(&func_name);
+                                gen_funcall_from_funcdef!(self, absolute_name, imported_func, &func_name, loc)
+                            } else {
+                                // TODO: Nicer name printing here
+                                return Err(error!(loc, "Unknown path `{modname}`"));
+                            }
                         }
                     },
                     _ => return Err(error_orphan!("Got a function call without an identifier")),
