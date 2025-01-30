@@ -685,7 +685,7 @@ impl Compiletime {
     pub fn emit(&mut self, mut decorated_mods: Vec<ParseModule>, options: &BuildOptions) -> Result<()> {
         let mut objs = Vec::new();
         for decorated_mod in &decorated_mods {
-            let name = decorated_mod.file_stem.clone();
+            let name = path_to_string(decorated_mod.name.clone());
             self.add_module(name, decorated_mod.function_map.clone());
         }
         for decorated_mod in decorated_mods.drain(..) {

@@ -1,4 +1,4 @@
-module foo;
+module std::foo;
 
 foo :: fn() {
     dbg 1337;

@@ -1,14 +1,14 @@
 module hello;
 
-import foo;
+import std::foo;
 
 // Comment test
 // int main(void) { printf("Hello world!\n"); }
 
 main :: fn() {
     foo();
-    foo::foo();
-    foo::add();
+    std::foo::foo();
+    std::foo::add();
 }
 
 foo :: fn() {
