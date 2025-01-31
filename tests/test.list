@@ -1,0 +1,16 @@
+../target/debug/main ./dbg.eve && ./b.out
+../target/debug/main ./inttypes.eve && ./b.out
+../target/debug/main ./algebra.eve && ./b.out
+../target/debug/main ./redefinition.eve && ./b.out
+../target/debug/main ./assignment.eve && ./b.out
+../target/debug/main ./bool.eve && ./b.out
+../target/debug/main ./boolexpr.eve && ./b.out
+../target/debug/main ./boolexpr_enforce.eve && ./b.out
+../target/debug/main ./comparison.eve && ./b.out
+../target/debug/main ./if.eve && ./b.out
+../target/debug/main ./stackframe1.eve && ./b.out
+../target/debug/main ./stackframe2.eve && ./b.out
+../target/debug/main ./while.eve && ./b.out
+../target/debug/main ./break_continue.eve && ./b.out
+../target/debug/main ./module.eve ./module_foo.eve && ./b.out
+../target/debug/main ./module2.eve ./module2_mod.eve ./module2_io_mod.eve && ./b.out

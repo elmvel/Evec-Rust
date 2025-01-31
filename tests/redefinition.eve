@@ -1,0 +1,10 @@
+module hello;
+
+// Comment test
+// int main(void) { printf("Hello world!\n"); }
+
+main :: fn() {
+    let x = 69;
+    let y = 420;
+    let y = 1337;
+}

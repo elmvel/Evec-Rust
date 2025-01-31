@@ -1,0 +1,16 @@
+module hello;
+
+// Comment test
+// int main(void) { printf("Hello world!\n"); }
+
+main :: fn() {
+    dbg true  && true;
+    dbg true  && false;
+    dbg false && true;
+    dbg false && false;
+    dbg 1111111111;
+    dbg true  || true;
+    dbg true  || false;
+    dbg false || true;
+    dbg false || false;
+}

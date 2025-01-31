@@ -1,0 +1,5 @@
+module std::mod;
+
+b :: fn() {
+    dbg 69;
+}
