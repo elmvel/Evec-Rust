@@ -6,7 +6,7 @@ use crate::Parser;
 use crate::parser::Result;
 use crate::errors::SyntaxError;
 
-impl Parser {
+impl<'a> Parser<'a> {
     pub fn parse_expr(&mut self) -> Result<Expr> {
         self.parse_expr_bp(0) 
     }

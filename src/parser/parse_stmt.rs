@@ -15,7 +15,7 @@ macro_rules! bubble_stmt {
     }
 }
 
-impl Parser {
+impl<'a> Parser<'a> {
     pub fn parse_stmts(&mut self) -> Result<Vec<Stmt>> {
         let mut stmts = Vec::new();
         self.expect(Token::Op(ldef!(), '{'))?;
@@ -48,8 +48,13 @@ impl Parser {
     <stmt.dbg> ::= 'dbg' <expr> ';'
     */
     pub fn parse_stmt_dbg(&mut self) -> Result<Option<Stmt>> {
-        if !self.lexer.eat(Token::Dbg(ldef!())) {
+        if self.lexer.peek() != Token::Dbg(ldef!()) {
             return Ok(None);
+        }
+        
+        let dbg = self.lexer.next();
+        if !self.options.debug {
+            return Err(error!(dbg.loc(), "Debug statements are only supported with the --debug flag"));
         }
 
         let expr = self.parse_expr()?;

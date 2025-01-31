@@ -38,6 +38,7 @@ struct BuildOptions {
     emit_assembly: bool,
     compile_only: bool,
     verbose_shell: bool,
+    debug: bool,
     output_name: Option<String>,
     assembler_path: Option<String>,
     linker_path: Option<String>,
@@ -54,7 +55,7 @@ fn entry(input_paths: Vec<String>, options: BuildOptions) -> crate::parser::Resu
             eprintln!("{e}");
             e
         })?;
-        let mut parser = Parser::from(lexer);
+        let mut parser = Parser::from(lexer, &options);
 
         let path = Path::new(&input_path).file_stem().unwrap();
         let parse_module = parser.parse(path.to_str().unwrap().to_string()).map_err(|e| {
@@ -88,6 +89,7 @@ fn main() -> ExitCode {
             },
             "-c" => options.compile_only = true,
             "-vs" | "--verbose-shell" => options.verbose_shell = true,
+            "-d" | "--debug" => options.debug = true,
             "--assembler" => {
                 expect_argument!(args, arg, options.assembler_path);
             },
@@ -135,6 +137,7 @@ fn print_help(program: &str) {
     println!("  -o                        Sets the executable name.");
     println!("  -c                        Only compile, do not link.");
     println!("  -vs, --verbose-shell      Show shell commands run by the compiler.");
+    println!("  -d, --debug               Allows for debug feature.");
     println!("  --assembler               Sets the assembler (default: cc).");
     println!("  -Z, --linker-path         Sets the linker (default: cc).");
     println!("  -z, --linker-arg          Forward an argument to the linker (default: cc).");

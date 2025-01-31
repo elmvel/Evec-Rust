@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 
+use crate::BuildOptions;
 use crate::lexer::{Lexer, Token, Location};
 use crate::ast::*;
 
@@ -19,8 +20,9 @@ pub struct ParseModule {
     pub function_map: HashMap<String, FunctionDecl>,
 }
 
-pub struct Parser {
+pub struct Parser<'a> {
     lexer: Lexer,
+    options: &'a BuildOptions,
     function_map: HashMap<String, FunctionDecl>,
 }
 
@@ -30,9 +32,9 @@ pub struct Parser {
 
 // maybe create a wrapper for Expr for identifiers and use .into functions to go
 // between types
-impl Parser {
-    pub fn from(lexer: Lexer) -> Self {
-        Self { lexer, function_map: HashMap::new() }
+impl<'a> Parser<'a> {
+    pub fn from(lexer: Lexer, options: &'a BuildOptions) -> Self {
+        Self { lexer, options, function_map: HashMap::new() }
     }
 
     fn expect(&mut self, token: Token) -> Result<()> {
