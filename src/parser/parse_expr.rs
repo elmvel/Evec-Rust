@@ -11,15 +11,43 @@ impl Parser {
         self.parse_expr_bp(0) 
     }
 
+    // TODO: proper error reporting (-> Result<Option<Expr>>)
     pub fn parse_expr_funcall(&mut self) -> Option<Expr> {
         let path = self.parse_expr_path().ok()?;
         if let Token::Op(_, '(') = self.lexer.peek() {
             self.lexer.next();
-            // TODO: handle arguments
-            self.expect(Token::Op(ldef!(), ')'));
-            return Some(Expr::Call(Box::new(path)));
+
+            let mut args = Vec::new();
+            while self.lexer.peek() != Token::Op(ldef!(), ')') {
+                let arg = self.parse_expr().ok()?;
+                if self.lexer.peek() != Token::Op(ldef!(), ')') {
+                    self.expect(Token::Op(ldef!(), ',')).ok()?;
+                }
+                args.push(arg);
+            }
+            
+            self.expect(Token::Op(ldef!(), ')')).ok()?;
+            return Some(Expr::Call(Box::new(path), args));
         }
         Some(path)
+    }
+
+    pub fn parse_expr_func_params(&mut self) -> Result<Vec<Param>> {
+        let mut params = Vec::new();
+        
+        while self.lexer.peek() != Token::Op(ldef!(), ')') {
+            let Expr::Ident(token) = self.parse_expr_ident()? else { unreachable!() };
+            self.expect(Token::Op(ldef!(), ':'))?;
+            let typ = self.parse_type()?;
+
+            if self.lexer.peek() != Token::Op(ldef!(), ')') {
+                self.expect(Token::Op(ldef!(), ','))?;
+            }
+            
+            params.push(Param(token, typ));
+        }
+
+        Ok(params)
     }
 
     pub fn parse_expr_term(&mut self) -> Result<Expr> {
@@ -44,15 +72,18 @@ impl Parser {
                 },
                 Token::Fn(loc) => {
                     self.expect(Token::Op(ldef!(), '('))?;
-                    // TODO: params
+                    let params = self.parse_expr_func_params()?;
                     self.expect(Token::Op(ldef!(), ')'))?;
-                    // TODO: return type
+
+                    let return_type = if self.lexer.eat(Token::WideOp(ldef!(), ('-', '>'))) {
+                        Some(self.parse_type()?)
+                    } else { None };
 
                     if self.lexer.peek() != Token::Op(ldef!(), '{') {
                         return Err(error!(loc, "Missing function body"));
                     }
                     let stmts = self.parse_stmts()?;
-                    Expr::Func(stmts)
+                    Expr::Func(params, return_type, stmts)
                 },
                 Token::Eof => Err(error_orphan!("Could not parse expr term from end-of-file"))?,
                 t => Err(error!(t.loc(), "Could not parse expr term from {t:?}"))?,

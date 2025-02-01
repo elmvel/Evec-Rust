@@ -18,6 +18,12 @@ macro_rules! genf {
     }
 }
 
+macro_rules! gen {
+    ($gen:expr, $($l:tt),+) => {
+        $gen.write(&format!($($l),+));
+    }
+}
+
 type Module = HashMap<String, FunctionDecl>;
 
 /////////// Bookkeeping ////////////////
@@ -124,13 +130,13 @@ impl FunctionContext {
 #[derive(Debug, Default, Clone, PartialEq, Eq, Hash)]
 pub struct FunctionDecl {
     name: String, //TODO: remove when not needed
-    // args: Vec<Type>,
-    // ret_type: Option<Type>,
+    params: Vec<Param>,
+    ret_type: Option<Type>,
 }
 
 impl FunctionDecl {
-    pub fn new(name: String) -> Self {
-        Self { name }
+    pub fn new(params: Vec<Param>, ret_type: Option<Type>, name: String) -> Self {
+        Self { params, ret_type, name }
     }
 }
 
@@ -195,16 +201,51 @@ fn get_func_name(s: String) -> String {
 }
 
 macro_rules! gen_funcall_from_funcdef {
-    ($slf:expr, $modname:expr, $def:expr, $text:expr, $loc:expr) => {
+    ($slf:expr, $comptime:expr, $modname:expr, $def:expr, $text:expr, $args:expr, $loc:expr) => {
         if $def.is_some() {
+            let def = $def.unwrap().clone();
+            let parlen = def.params.len();
+            
             let tag = $slf.ctx.alloc();
-            // TODO: track return type
             let txt = $text;
-            genf!($slf, "%.s{tag} =w call ${}.{txt}()", $modname);
-            //todo!("funcall")
-            Ok(StackValue{tag, typ: Type::Void})
+            let ret_type = def.ret_type.clone().unwrap_or(Type::Void);
+            let qt = ret_type.qbe_type();
+
+            let arglen = $args.len();
+            if arglen != parlen {
+                return Err(error!($loc, "Expected {parlen} arguments, got {arglen} instead."));
+            }
+
+            // Generate expressions
+            let mut stack_values = Vec::new();
+            for expr in $args.drain(..) {
+                stack_values.push($slf.emit_expr($comptime, expr, None)?);
+            }
+
+            // Type check arguments
+            for i in 0..stack_values.len() {
+                if stack_values[i].typ != def.params.get(i).unwrap().1 {
+                    return Err(error!(def.params[i].0.loc(), "Parameter expected type {:?}, but got {:?} instead.", (def.params[i].1), (stack_values[i].typ)));
+                }
+            }
+
+            gen!($slf, "%.s{tag} ={qt} call ${}.{txt}(", $modname);
+
+            // Emit arguments
+            gen!($slf, "{}", (stack_values
+                              .iter()
+                              .map(|StackValue{tag, typ}| {
+                                  let qtype = typ.qbe_type();
+                                  format!("{qtype} %.s{tag}")
+                              })
+                              .collect::<Vec<String>>()
+                              .join(", ")
+            ));
+            genf!($slf, ")");
+
+            Ok(StackValue{tag, typ: ret_type})
+            //Ok(StackValue{tag, typ: Type::Void})
         } else {
-            // TODO: Look in "imported" modules
             let txt = $text;
             return Err(error!($loc, "Could not find function '{txt}'"));
         }
@@ -249,11 +290,7 @@ impl Generator {
         let _ = self.ctx.frames.pop();
     }
 
-    fn func_map(&mut self) -> &mut HashMap<String, FunctionDecl> {
-        &mut self.decorated_mod.function_map
-    }
-
-    fn import_lookup<'a>(&mut self, comptime: &'a Compiletime, modname: &str) -> Option<&'a Module> {
+    fn import_lookup<'a>(&mut self, comptime: &'a mut Compiletime, modname: &str) -> Option<&'a Module> {
         // No-op except for ? operator
         let imported_name = self.imports.get(modname)?;
         comptime.module_map.get(modname)
@@ -303,12 +340,13 @@ impl Generator {
     pub fn emit_global(&mut self, comptime: &mut Compiletime, global: Global) -> Result<()> {
         match global {
             Global::Decl(name, expr) => {
-                let Expr::Func(stmts) = expr else {
+                let Expr::Func(params, ret_type, stmts) = expr else {
                     return Err(error!(name.loc(), "Only global functions are supported for now!"));
                 };
                 let Token::Ident(_, text) = name.clone() else { unreachable!() };
-                self.func_map().insert(text.clone(), FunctionDecl::new(text));
-                self.emit_function(comptime, name, stmts)
+                // TODO IMPORTANT: was this necessary?
+                //self.func_map().insert(text.clone(), FunctionDecl::new(text));
+                self.emit_function(comptime, params, ret_type, name, stmts)
             },
             Global::Import(expr) => {
                 let loc = expr.loc();
@@ -324,33 +362,80 @@ impl Generator {
         }
     }
 
-    pub fn emit_function(&mut self, comptime: &mut Compiletime, name: Token, stmts: Vec<Stmt>) -> Result<()> {
+    pub fn emit_function(&mut self, comptime: &mut Compiletime, params: Vec<Param>, ret_type: Option<Type>, name: Token, stmts: Vec<Stmt>) -> Result<()> {
         let Token::Ident(loc, text) = name else {
             unreachable!("must have an ident here")
         };
 
+        let qbe_return_type = match ret_type {
+            Some(ref typ) => typ.qbe_type(),
+            None => "",
+        };
+
         // TODO: clearly define main semantics
+        let mut setting_main = false;
         if &text == "main" {
             if comptime.main_defined {
                 return Err(error!(loc, "Redefinition of function main!"));
             }
-            genf!(self, "export function w $main() {{\n@start");
+            gen!(self, "export function w $main(");
+            let mut hack = 0;
+            gen!(self, "{}", (params
+                  .iter()
+                  .map(|Param(tag, typ)| {
+                      let f = format!("{} %.s{hack}", typ.qbe_type());
+                      hack += 1;
+                      f
+                  })
+                  .collect::<Vec<String>>()
+                  .join(", "))
+            );
+            genf!(self, ") {{\n@start");
             comptime.main_defined = true;
+            setting_main = true;
         } else {
-            genf!(self, "export function w ${}.{text}() {{\n@start", (self.generated_mod.name));
+            gen!(self, "export function {qbe_return_type} ${}.{text}(", (self.generated_mod.name));
+            let mut hack = 0;
+            gen!(self, "{}", (params
+                  .iter()
+                  .map(|Param(tag, typ)| {
+                      let f = format!("{} %.s{hack}", typ.qbe_type());
+                      hack += 1;
+                      f
+                  })
+                  .collect::<Vec<String>>()
+                  .join(", "))
+            );
+            genf!(self, ") {{\n@start");
         }
 
         self.ctx = FunctionContext::default();
-        self.emit_stmts(comptime, stmts)?;
+
+        // Add all parameters to symbol table
+        let mut prelude = StackFrame::default();
+        for Param(token, typ) in params {
+            let Token::Ident(_, text) = token else { unreachable!() };
+            let tag = self.ctx.alloc();
+            prelude.symtab_store(text, StackValue{tag, typ});
+        }
         
-        genf!(self, "ret 0");
+        self.emit_stmts(comptime, stmts, Some(prelude))?;
+        
+        if ret_type.is_some() || setting_main {
+            genf!(self, "ret 0");
+        } else {
+            genf!(self, "ret");
+        }
         genf!(self, "}}");
         Ok(())
     }
 
-    pub fn emit_stmts(&mut self, comptime: &mut Compiletime, stmts: Vec<Stmt>) -> Result<()> {
+    pub fn emit_stmts(&mut self, comptime: &mut Compiletime, stmts: Vec<Stmt>, prelude: Option<StackFrame>) -> Result<()> {
         // TODO: handle stack frames in here
-        self.push_frame();
+        match prelude {
+            Some(frame) => self.ctx.frames.push(frame),
+            None => self.push_frame(),
+        }
         for stmt in stmts {
             self.emit_stmt(comptime, stmt)?;
         }
@@ -398,7 +483,7 @@ impl Generator {
                 Ok(())
             },
             Stmt::Scope(stmts) => {
-                self.emit_stmts(comptime, stmts)?;
+                self.emit_stmts(comptime, stmts, None)?;
                 Ok(())
             },
             Stmt::Ex(expr) => {
@@ -463,7 +548,17 @@ impl Generator {
                 genf!(self, "@p{p}_stopper{s}");
                 Ok(())
             },
-            s => todo!("other statement types: {s:?}")
+            Stmt::Return(loc, opt) => {
+                if let Some(expr) = opt {
+                    let val = self.emit_expr(comptime, expr, None)?;
+                    genf!(self, "ret %.s{}", (val.tag));
+                } else {
+                    genf!(self, "ret");
+                }
+                let s = self.ctx.stopper();
+                genf!(self, "@return_stopper{s}");
+                Ok(())
+            },
         }
     }
 
@@ -659,16 +754,17 @@ impl Generator {
                     c => todo!("op `{c:?}`"),
                 }
             },
-            Expr::Func(stmts) => {
+            Expr::Func(params, ret_type, stmts) => {
                 unreachable!("TBD: Should I put emit_function in here?")
             },
-            Expr::Call(box_expr) => {
+            Expr::Call(box_expr, mut args) => {
+                // todo!("Parse for expressions in function calls. Then, using $def in the gen_funcall_from_funcdef macro, check the validity of arguments passed and call with the correct arguments");
                 match *box_expr {
                     Expr::Ident(token) => {
                         //todo!("work on module resolution and maybe return types");
                         let Token::Ident(loc, text) = token else { unreachable!() };
-                        let local_func = self.func_map().get(&text);
-                        gen_funcall_from_funcdef!(self, (self.generated_mod.name),local_func, &text, loc)
+                        let local_func = self.decorated_mod.function_map.get(&text);
+                        gen_funcall_from_funcdef!(self, comptime, (self.generated_mod.name),local_func, &text, args, loc)
                     },
                     Expr::Path(token, box_expr) => {
                         // todo!("module resolution: make sure function maps get moved into Compiletime for module resolution lookup. This should be the library for which the 'import' statement can be moved into the Generator function map (I might need to make another structure which contains a global map and also a map of imported modules (key is the full path))")
@@ -678,12 +774,12 @@ impl Generator {
                         if let Some(module) = self.import_lookup(comptime, &modname) {
                             let func_name = get_func_name(path);
                             let imported_func = module.get(&func_name);
-                            gen_funcall_from_funcdef!(self, modname, imported_func, &func_name, loc)
+                            gen_funcall_from_funcdef!(self, comptime, modname, imported_func, &func_name, args, loc)
                         } else {
                             if let Some((module, absolute_name)) = self.import_lookup_fuzzy(comptime, &modname) {
                                 let func_name = get_func_name(path);
                                 let imported_func = module.get(&func_name);
-                                gen_funcall_from_funcdef!(self, absolute_name, imported_func, &func_name, loc)
+                                gen_funcall_from_funcdef!(self, comptime, absolute_name, imported_func, &func_name, args, loc)
                             } else {
                                 // TODO: Nicer name printing here
                                 return Err(error!(loc, "Unknown path `{modname}`"));

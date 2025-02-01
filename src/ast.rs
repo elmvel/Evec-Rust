@@ -88,7 +88,11 @@ pub enum Stmt {
     While(Expr, Box<Stmt>),
     Break(Location),
     Continue(Location),
+    Return(Location, Option<Expr>),
 }
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct Param(pub Token, pub Type);
 
 #[derive(Debug, Clone)]
 pub enum Expr {
@@ -98,8 +102,8 @@ pub enum Expr {
     Bool(Token),
     BinOp(Op, Box<Expr>, Box<Expr>),
     UnOp(Op, Box<Expr>),
-    Func(Vec<Stmt>), // Eventually Func(Token, Vec<Param>, RetType, Vec<Stmt>)
-    Call(Box<Expr>), // TODO: add parameters
+    Func(Vec<Param>, Option<Type>, Vec<Stmt>), // Eventually Func(Token, Vec<Param>, RetType, Vec<Stmt>)
+    Call(Box<Expr>, Vec<Expr>), // TODO: add parameters
 }
 
 impl Expr {
@@ -111,13 +115,13 @@ impl Expr {
             Expr::Bool(t) => t.loc(),
             Expr::BinOp(_, lhs, _) => lhs.loc(),
             Expr::UnOp(_, expr) => expr.loc(),
-            Expr::Func(_) => todo!(),
-            Expr::Call(t) => t.loc(),
+            Expr::Func(_, _, _) => todo!(),
+            Expr::Call(t, _) => t.loc(),
         }
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Type {
     Void,
     U64,

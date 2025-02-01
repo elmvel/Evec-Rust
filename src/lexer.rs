@@ -4,7 +4,7 @@ use core::iter::from_fn;
 
 use crate::errors::SyntaxError;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Token {
     // Core
     Ident(Location, String),
@@ -25,6 +25,7 @@ pub enum Token {
     While(Location),
     Break(Location),
     Continue(Location),
+    Return(Location),
 
     // Types
     U64(Location),
@@ -63,6 +64,7 @@ impl Token {
             Token::While(loc) => loc.clone(),
             Token::Break(loc) => loc.clone(),
             Token::Continue(loc) => loc.clone(),
+            Token::Return(loc) => loc.clone(),
             Token::U64(loc) => loc.clone(),
             Token::U32(loc) => loc.clone(),
             Token::U16(loc) => loc.clone(),
@@ -79,7 +81,7 @@ impl Token {
     }
 }
 
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, Hash)]
 pub struct Location {
     file_path: String,
     line: usize,
@@ -126,6 +128,7 @@ const WIDE_CHARS: &[(char, char)] = &[
     ('<', '='),
     ('=', '='),
     ('!', '='),
+    ('-', '>'),
 ];
 
 impl Lexer {
@@ -173,7 +176,7 @@ impl Lexer {
                 },
                 '+' | '-' | '*' | '/' | '.' | '!' | '(' | ')' |
                 '[' | ']' | ';' | '{' | '}' | '=' | ':' | '>' |
-                '<' => {
+                '<' | ',' => {
                         tokens.push(Token::Op(Location::new(input_path.into(), line, col), ch));
                         col += 1;
                 },
@@ -233,6 +236,7 @@ impl Lexer {
             "while" => Token::While(loc),
             "break" => Token::Break(loc),
             "continue" => Token::Continue(loc),
+            "return" => Token::Return(loc),
 
             "u64" => Token::U64(loc),
             "u32" => Token::U32(loc),

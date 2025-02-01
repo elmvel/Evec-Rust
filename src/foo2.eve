@@ -1,5 +1,0 @@
-module std::io::foo;
-
-blah :: fn() {
-    dbg 101;
-}

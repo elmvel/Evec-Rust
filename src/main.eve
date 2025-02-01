@@ -1,17 +1,10 @@
 module hello;
 
-import std::foo;
-import std::io::foo;
-
-// Comment test
-// int main(void) { printf("Hello world!\n"); }
-
 main :: fn() {
-    foo();
-    io::foo::blah();
-    std::foo::add();
+    let i: s32 = add(34, 35);
+    dbg i;
 }
 
-foo :: fn() {
-    dbg 69;
+add :: fn(x: s32, y: s32) -> s32 {
+    return x + y;
 }

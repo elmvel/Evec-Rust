@@ -127,10 +127,10 @@ impl Parser {
         self.expect(Token::WideOp(ldef!(), (':', ':')))?;
         let expr = self.parse_expr()?;
         
-        if let Expr::Func(stmts) = expr {
+        if let Expr::Func(params, ret_type, stmts) = expr {
             let Token::Ident(_, text) = token.clone() else { unreachable!() };
-            self.function_map.insert(text.clone(), FunctionDecl::new(text));
-            Ok(Global::Decl(token, Expr::Func(stmts)))
+            self.function_map.insert(text.clone(), FunctionDecl::new(params.clone(), ret_type.clone(), text));
+            Ok(Global::Decl(token, Expr::Func(params, ret_type, stmts)))
         } else {
             Ok(Global::Decl(token, expr))
         }
