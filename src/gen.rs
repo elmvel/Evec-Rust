@@ -174,6 +174,7 @@ struct Generator {
     ctx: FunctionContext,
     expected_type: Option<Type>,
     imports: HashSet<String>,
+    expected_return: Type,
 }
 
 pub fn path_to_string(expr: Expr) -> String {
@@ -261,6 +262,7 @@ impl Generator {
             ctx: FunctionContext::default(),
             expected_type: None,
             imports: HashSet::new(),
+            expected_return: Type::Void,
         };
         gen.generated_mod.name = name;
         gen
@@ -367,6 +369,10 @@ impl Generator {
             unreachable!("must have an ident here")
         };
 
+        self.expected_return = match ret_type {
+            Some(ref typ) => typ.clone(),
+            None => Type::Void,
+        };
         let qbe_return_type = match ret_type {
             Some(ref typ) => typ.qbe_type(),
             None => "",
@@ -427,6 +433,7 @@ impl Generator {
             genf!(self, "ret");
         }
         genf!(self, "}}");
+        self.expected_return = Type::Void;
         Ok(())
     }
 
@@ -551,8 +558,14 @@ impl Generator {
             Stmt::Return(loc, opt) => {
                 if let Some(expr) = opt {
                     let val = self.emit_expr(comptime, expr, None)?;
+                    if self.expected_return != val.typ {
+                        return Err(error!(loc, "Expected to return {:?}, but got {:?} instead", (self.expected_return), (val.typ)));
+                    }
                     genf!(self, "ret %.s{}", (val.tag));
                 } else {
+                    if self.expected_return != Type::Void {
+                        return Err(error!(loc, "Expected to return {:?}, but got {:?} instead", (self.expected_return), (Type::Void)));
+                    }
                     genf!(self, "ret");
                 }
                 let s = self.ctx.stopper();

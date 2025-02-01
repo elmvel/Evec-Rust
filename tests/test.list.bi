@@ -1,4 +1,4 @@
-:i count 17
+:i count 18
 :b shell 41
 ../target/debug/main ./dbg.eve && ./b.out
 :i returncode 0
@@ -213,4 +213,12 @@ Created executable b.out!
 69
 
 :b stderr 0
+
+:b shell 54
+../target/debug/main ./return_typecheck.eve && ./b.out
+:i returncode 1
+:b stdout 0
+
+:b stderr 81
+./return_typecheck.eve:16:5: error: Expected to return Bool, but got S32 instead
 

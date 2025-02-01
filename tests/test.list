@@ -15,3 +15,4 @@
 ../target/debug/main ./module.eve ./module_foo.eve && ./b.out
 ../target/debug/main ./module2.eve ./module2_mod.eve ./module2_io_mod.eve && ./b.out
 ../target/debug/main ./functions.eve && ./b.out
+../target/debug/main ./return_typecheck.eve && ./b.out
