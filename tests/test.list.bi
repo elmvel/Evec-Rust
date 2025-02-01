@@ -1,4 +1,4 @@
-:i count 16
+:i count 17
 :b shell 41
 ../target/debug/main ./dbg.eve && ./b.out
 :i returncode 0
@@ -204,4 +204,13 @@ Created executable b.out!
 
 :b stderr 57
 warning: Ambiguous path `mod`, choosing the first one...
+
+:b shell 47
+../target/debug/main ./functions.eve && ./b.out
+:i returncode 0
+:b stdout 29
+Created executable b.out!
+69
+
+:b stderr 0
 

@@ -1,0 +1,10 @@
+module hello;
+
+main :: fn() {
+    let i: s32 = add(34, 35);
+    dbg i;
+}
+
+add :: fn(x: s32, y: s32) -> s32 {
+    return x + y;
+}
