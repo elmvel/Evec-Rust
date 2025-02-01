@@ -1,0 +1,6 @@
+module main;
+
+main :: fn() {
+    let x = 5;
+    dbg x;
+}

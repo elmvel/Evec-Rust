@@ -1,0 +1,9 @@
+module std::io::mod;
+
+a :: fn() {
+    dbg 420;
+}
+
+b :: fn() {
+    dbg 1337;
+}

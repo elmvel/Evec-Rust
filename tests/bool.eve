@@ -1,0 +1,11 @@
+module hello;
+
+// Comment test
+// int main(void) { printf("Hello world!\n"); }
+
+main :: fn() {
+    let b: bool = true;
+    dbg b;
+    let x = false;
+    dbg x;
+}

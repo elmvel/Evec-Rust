@@ -1,0 +1,22 @@
+module hello;
+
+main :: fn() {
+    if false then
+    dbg 1;
+    else {
+        dbg 1;
+        dbg 3;
+        dbg 3;
+        dbg 7;
+    }
+
+    if false {
+        if true {
+            dbg 420;
+        } else if 69 == 69 {
+            dbg 101;
+        }
+    } else if -1 < 0 {
+        dbg 0;
+    }
+}

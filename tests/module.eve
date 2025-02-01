@@ -1,0 +1,13 @@
+module hello;
+
+import foo;
+
+main :: fn() {
+    foo();
+    foo::foo();
+    foo::add();
+}
+
+foo :: fn() {
+    dbg 69;
+}

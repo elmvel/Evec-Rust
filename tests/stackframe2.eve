@@ -1,0 +1,24 @@
+module hello;
+
+main :: fn() {
+    let x = 69;
+    dbg x;
+
+    {
+        let y = 420;
+    }
+    dbg y;
+}
+
+
+foo :: fn() {
+    if true then dbg 69;
+}
+
+bar :: fn() {
+    if false {
+        dbg 420;
+    } else if 69 == 69 {
+        dbg 1337;
+    }
+}
