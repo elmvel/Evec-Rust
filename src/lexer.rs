@@ -176,7 +176,7 @@ impl Lexer {
                 },
                 '+' | '-' | '*' | '/' | '.' | '!' | '(' | ')' |
                 '[' | ']' | ';' | '{' | '}' | '=' | ':' | '>' |
-                '<' | ',' => {
+                '<' | ',' | '&' => {
                         tokens.push(Token::Op(Location::new(input_path.into(), line, col), ch));
                         col += 1;
                 },

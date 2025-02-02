@@ -5,6 +5,7 @@ use std::path::Path;
 
 use crate::lexer::Lexer;
 use crate::parser::Parser;
+use crate::decorator::Decorator;
 use crate::gen::Compiletime;
 
 #[macro_use] 
@@ -13,6 +14,7 @@ mod error_macro;
 mod ast;
 mod precedence;
 mod parser;
+mod decorator;
 mod errors;
 mod gen;
 
@@ -47,7 +49,7 @@ struct BuildOptions {
 
 // TODO: handle multiple source files even though we technically take in a vector
 fn entry(input_paths: Vec<String>, options: BuildOptions) -> crate::parser::Result<()> {
-    let mut parse_modules = Vec::new();
+    let mut decorated_modules = Vec::new();
     
     for input_path in input_paths {
         let mut lexer = Lexer::new(&input_path).map_err(|e| {
@@ -61,11 +63,13 @@ fn entry(input_paths: Vec<String>, options: BuildOptions) -> crate::parser::Resu
             eprintln!("{e}");
             e
         })?;
-        parse_modules.push(parse_module);
+        let mut decorator = Decorator::new(parse_module);
+        decorator.decorate();
+        decorated_modules.push(decorator.decorated_mod);
     }
 
     let mut comptime = Compiletime::new();
-    let _ = comptime.emit(parse_modules, &options).map_err(|e| {
+    let _ = comptime.emit(decorated_modules, &options).map_err(|e| {
         eprintln!("{e}");
         e
     })?;

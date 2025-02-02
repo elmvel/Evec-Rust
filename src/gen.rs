@@ -8,6 +8,7 @@ use crate::BuildOptions;
 use crate::lexer::{Token, Location};
 use crate::parser::ParseModule;
 use crate::parser::Result;
+use crate::decorator::DecoratedModule;
 use crate::ast::*;
 use crate::errors::SyntaxError;
 
@@ -169,7 +170,7 @@ struct GeneratedModule {
 }
 
 struct Generator {
-    pub decorated_mod: ParseModule,
+    pub decorated_mod: DecoratedModule,
     pub generated_mod: GeneratedModule,
     ctx: FunctionContext,
     expected_type: Option<Type>,
@@ -209,7 +210,7 @@ macro_rules! gen_funcall_from_funcdef {
             
             let tag = $slf.ctx.alloc();
             let txt = $text;
-            let ret_type = def.ret_type.clone().unwrap_or(Type::Void);
+            let ret_type = def.ret_type.clone().unwrap_or(TypeKind::Void.into());
             let qt = ret_type.qbe_type();
 
             let arglen = $args.len();
@@ -254,15 +255,15 @@ macro_rules! gen_funcall_from_funcdef {
 }
 
 impl Generator {
-    pub fn new(decorated_mod: ParseModule) -> Self {
-        let name = path_to_string(decorated_mod.name.clone());
+    pub fn new(decorated_mod: DecoratedModule) -> Self {
+        let name = path_to_string(decorated_mod.parse_module.name.clone());
         let mut gen = Self {
             decorated_mod,
             generated_mod: GeneratedModule::default(),
             ctx: FunctionContext::default(),
             expected_type: None,
             imports: HashSet::new(),
-            expected_return: Type::Void,
+            expected_return: TypeKind::Void.into(),
         };
         gen.generated_mod.name = name;
         gen
@@ -331,9 +332,9 @@ impl Generator {
         // for global in self.decorated_mod.globals.drain(..) {
         //     self.emit_global(global)?;
         // }
-        self.decorated_mod.globals.reverse();
-        while !self.decorated_mod.globals.is_empty() {
-            let global = self.decorated_mod.globals.pop().unwrap();
+        self.decorated_mod.parse_module.globals.reverse();
+        while !self.decorated_mod.parse_module.globals.is_empty() {
+            let global = self.decorated_mod.parse_module.globals.pop().unwrap();
             self.emit_global(comptime, global)?;
         }
         Ok(())
@@ -371,7 +372,7 @@ impl Generator {
 
         self.expected_return = match ret_type {
             Some(ref typ) => typ.clone(),
-            None => Type::Void,
+            None => TypeKind::Void.into(),
         };
         let qbe_return_type = match ret_type {
             Some(ref typ) => typ.qbe_type(),
@@ -433,7 +434,7 @@ impl Generator {
             genf!(self, "ret");
         }
         genf!(self, "}}");
-        self.expected_return = Type::Void;
+        self.expected_return = TypeKind::Void.into();
         Ok(())
     }
 
@@ -455,26 +456,43 @@ impl Generator {
             Stmt::Dbg(expr) => {
                 let val = self.emit_expr(comptime, expr, None)?;
 
-                match val.typ {
-                    Type::U64 | Type::S64 => {
+                match val.typ.kind {
+                    TypeKind::U64 | TypeKind::S64 => {
                         genf!(self, "%.void =w call $printf(l $fmt_ll, ..., l %.s{})", val);
                     },
-                    Type::U32 | Type::U16 | Type::U8 |
-                    Type::S32 | Type::S16 | Type::S8 => {
+                    TypeKind::U32 | TypeKind::U16 | TypeKind::U8 |
+                    TypeKind::S32 | TypeKind::S16 | TypeKind::S8 => {
                         genf!(self, "%.void =w call $printf(l $fmt_d, ..., w %.s{})", val);
                     },
-                    Type::Bool => {
+                    TypeKind::Bool => {
                         genf!(self, "%.void =w call $printf(l $fmt_bool, ..., w %.s{})", val);
                     },
-                    Type::Void => unreachable!(),
+                    TypeKind::Void => unreachable!(),
                 }
                 // TODO: match on stackvalue's type
                 Ok(())
             },
             Stmt::Let(name, typ, expr) => {
                 let Token::Ident(loc, text) = name else { unreachable!() };
+
+                // Do we need to allocate this on the stack?
+                let mut allocate = false;
+                if self.decorated_mod.addressed_vars.contains(&text) {
+                    allocate = true;
+                }
                 
-                let val = self.emit_expr(comptime, expr, typ.clone())?;
+                let expr = self.emit_expr(comptime, expr, typ.clone())?;
+
+                let val = if allocate {
+                    let tag = self.ctx.alloc();
+                    // TODO: alignment
+                    genf!(self, "%.s{tag} =l alloc4 {}", (expr.typ.sizeof()));
+                    genf!(self, "store{} %.s{}, %.s{tag}", (expr.typ.qbe_type()), (expr.tag));
+                    StackValue{tag, typ: expr.typ}
+                } else {
+                    expr
+                };
+                
                 if let Some(expected_type) = typ {
                     if val.typ != expected_type {
                         return Err(error!(loc, "Expected type {expected_type:?}, but got {:?} instead", (val.typ)));
@@ -559,12 +577,13 @@ impl Generator {
                 if let Some(expr) = opt {
                     let val = self.emit_expr(comptime, expr, None)?;
                     if self.expected_return != val.typ {
-                        return Err(error!(loc, "Expected to return {:?}, but got {:?} instead", (self.expected_return), (val.typ)));
+                        return Err(error!(loc, "Expected to return {:?}, but got {:?} instead", (self.expected_return.kind), (val.typ.kind)));
                     }
                     genf!(self, "ret %.s{}", (val.tag));
                 } else {
-                    if self.expected_return != Type::Void {
-                        return Err(error!(loc, "Expected to return {:?}, but got {:?} instead", (self.expected_return), (Type::Void)));
+                    if self.expected_return != TypeKind::Void.into() {
+                        let void: Type = TypeKind::Void.into();
+                        return Err(error!(loc, "Expected to return {:?}, but got {:?} instead", (self.expected_return.kind), (void.kind)));
                     }
                     genf!(self, "ret");
                 }
@@ -579,8 +598,27 @@ impl Generator {
         match expr {
             Expr::Ident(token) => {
                 let Token::Ident(loc, text) = token else { unreachable!() };
+
+                let mut allocated = false;
+                if self.decorated_mod.addressed_vars.contains(&text) {
+                    allocated = true;
+                }
+
                 let val = self.ctx.lookup(&text, loc)?;
-                Ok(val)
+                if allocated {
+                    let tag = self.ctx.alloc();
+                    let deref = val.typ.deref();
+                    let qtype = deref.qbe_type();
+                    // TODO: won't be compatible with large data
+                    if val.typ.unsigned() {
+                        genf!(self, "%.s{tag} ={qtype} loadu{qtype} %.s{}", (val.tag));
+                    } else {
+                        genf!(self, "%.s{tag} ={qtype} loads{qtype} %.s{}", (val.tag));
+                    }
+                    Ok(StackValue{tag, typ: val.typ})
+                } else {
+                    Ok(val)
+                }
             },
             Expr::Path(token, box_expr) => {
                 todo!()
@@ -595,7 +633,7 @@ impl Generator {
                 };
 
                 genf!(self, "%.s{tag} =w copy {b}");
-                Ok(StackValue{ typ: Type::Bool, tag })
+                Ok(StackValue{ typ: TypeKind::Bool.into(), tag })
             },
             Expr::Number(token) => {
                 // TODO: assuming its an i32 for now
@@ -606,10 +644,10 @@ impl Generator {
                     if typ.assert_number(ldef!()).is_ok() {
                         typ
                     } else {
-                        Type::S32
+                        TypeKind::S32.into()
                     }
                 } else {
-                    Type::S32
+                    TypeKind::S32.into()
                 };
                 let qtyp = typ.qbe_type();
                 genf!(self, "%.s{tag} ={qtyp} copy {i}");
@@ -653,7 +691,8 @@ impl Generator {
 
                         let new = self.emit_expr(comptime, *box_rhs, Some(val.typ.clone()))?;
                         if val.typ != new.typ {
-                            return Err(error!(loc, "Assignment expected {:?}, got {:?} instead", (val.typ), (new.typ)))
+                            // TODO: print types properly
+                            return Err(error!(loc, "Assignment expected {:?}, got {:?} instead", (val.typ.kind), (new.typ.kind)))
                         }
                         // Redundant but necessary
                         let qtyp = new.typ.qbe_type();
@@ -664,8 +703,8 @@ impl Generator {
                         let lloc = box_lhs.loc();
                         let rloc = box_rhs.loc();
                         
-                        let lval = self.emit_expr(comptime, *box_lhs, Some(Type::Bool))?;
-                        let rval = self.emit_expr(comptime, *box_rhs, Some(Type::Bool))?;
+                        let lval = self.emit_expr(comptime, *box_lhs, Some(TypeKind::Bool.into()))?;
+                        let rval = self.emit_expr(comptime, *box_rhs, Some(TypeKind::Bool.into()))?;
                         lval.typ.assert_bool(lloc)?;
                         rval.typ.assert_bool(rloc)?;
 
@@ -684,14 +723,14 @@ impl Generator {
                         genf!(self, "%.s{tag} =w copy 0"); // Set false if we jump here
 
                         genf!(self, "@l{l}_end");
-                        Ok(StackValue{ tag, typ: Type::Bool })
+                        Ok(StackValue{ tag, typ: TypeKind::Bool.into() })
                     },
                     Op::OrOr => {
                         let lloc = box_lhs.loc();
                         let rloc = box_rhs.loc();
                         
-                        let lval = self.emit_expr(comptime, *box_lhs, Some(Type::Bool))?;
-                        let rval = self.emit_expr(comptime, *box_rhs, Some(Type::Bool))?;
+                        let lval = self.emit_expr(comptime, *box_lhs, Some(TypeKind::Bool.into()))?;
+                        let rval = self.emit_expr(comptime, *box_rhs, Some(TypeKind::Bool.into()))?;
                         lval.typ.assert_bool(lloc)?;
                         rval.typ.assert_bool(rloc)?;
 
@@ -710,7 +749,7 @@ impl Generator {
                         genf!(self, "%.s{tag} =w copy 0"); // Set false if we jump here
 
                         genf!(self, "@l{l}_end");
-                        Ok(StackValue{ tag, typ: Type::Bool })
+                        Ok(StackValue{ tag, typ: TypeKind::Bool.into() })
                     },
                     Op::Gt | Op::Lt | Op::Ge | Op::Le | Op::EqEq | Op::NotEq => {
                         let lloc = box_lhs.loc();
@@ -742,7 +781,7 @@ impl Generator {
                         } else {
                             genf!(self, "%.s{tag} =w c{instr}{qtyp} %.s{}, %.s{}", (lval.tag), (rval.tag));
                         }
-                        Ok(StackValue{ tag, typ: Type::Bool })
+                        Ok(StackValue{ tag, typ: TypeKind::Bool.into() })
                     },
                     _ => todo!()
                 }
@@ -755,12 +794,23 @@ impl Generator {
                                 let Token::Int(_, i) = token else { unreachable!() };
                                 let tag = self.ctx.alloc();
 
-                                let typ = expected_type.unwrap_or(Type::S32);
+                                let typ = expected_type.unwrap_or(TypeKind::S32.into());
                                 let qtyp = typ.qbe_type();
                                 genf!(self, "%.s{tag} ={qtyp} copy -{i}");
                                 Ok(StackValue{ typ, tag })
                             },
                             Expr::Ident(token) => todo!(),
+                            _ => unreachable!("Unsupported expr"),
+                        }
+                    },
+                    Op::And => {
+                        match *box_expr {
+                            Expr::Ident(token) => {
+                                // We should already allocate the variable as a pointer
+                                let Token::Ident(loc, text) = token else { unreachable!() };
+                                let val = self.ctx.lookup(&text, loc)?;
+                                Ok(val)
+                            },
                             _ => unreachable!("Unsupported expr"),
                         }
                     },
@@ -776,7 +826,7 @@ impl Generator {
                     Expr::Ident(token) => {
                         //todo!("work on module resolution and maybe return types");
                         let Token::Ident(loc, text) = token else { unreachable!() };
-                        let local_func = self.decorated_mod.function_map.get(&text);
+                        let local_func = self.decorated_mod.parse_module.function_map.get(&text);
                         gen_funcall_from_funcdef!(self, comptime, (self.generated_mod.name),local_func, &text, args, loc)
                     },
                     Expr::Path(token, box_expr) => {
@@ -817,14 +867,14 @@ impl Compiletime {
         }
     }
 
-    pub fn emit(&mut self, mut decorated_mods: Vec<ParseModule>, options: &BuildOptions) -> Result<()> {
+    pub fn emit(&mut self, mut decorated_mods: Vec<DecoratedModule>, options: &BuildOptions) -> Result<()> {
         let mut objs = Vec::new();
         for decorated_mod in &decorated_mods {
-            let name = path_to_string(decorated_mod.name.clone());
-            self.add_module(name, decorated_mod.function_map.clone());
+            let name = path_to_string(decorated_mod.parse_module.name.clone());
+            self.add_module(name, decorated_mod.parse_module.function_map.clone());
         }
         for decorated_mod in decorated_mods.drain(..) {
-            let name = decorated_mod.file_stem.clone();
+            let name = decorated_mod.parse_module.file_stem.clone();
 
             let mut generator = Generator::new(decorated_mod);
             generator.emit(self)?;
@@ -886,7 +936,7 @@ impl Compiletime {
             }
 
             objs.push(format!("{name}.o"));
-            self.add_module(generator.generated_mod.name, generator.decorated_mod.function_map);
+            self.add_module(generator.generated_mod.name, generator.decorated_mod.parse_module.function_map);
         }
 
         let output_name = options.output_name.clone().unwrap_or("b.out".to_string());

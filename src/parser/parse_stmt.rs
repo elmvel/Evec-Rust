@@ -61,15 +61,15 @@ impl Parser {
 
     pub fn parse_type(&mut self) -> Result<Type> {
         let typ = match self.lexer.next() {
-            Token::U64(_) => Type::U64,
-            Token::U32(_) => Type::U32,
-            Token::U16(_) => Type::U16,
-            Token::U8(_) => Type::U8,
-            Token::S64(_) => Type::S64,
-            Token::S32(_) => Type::S32,
-            Token::S16(_) => Type::S16,
-            Token::S8(_) => Type::S8,
-            Token::Bool(_) => Type::Bool,
+            Token::U64(_) => TypeKind::U64.into(),
+            Token::U32(_) => TypeKind::U32.into(),
+            Token::U16(_) => TypeKind::U16.into(),
+            Token::U8(_) => TypeKind::U8.into(),
+            Token::S64(_) => TypeKind::S64.into(),
+            Token::S32(_) => TypeKind::S32.into(),
+            Token::S16(_) => TypeKind::S16.into(),
+            Token::S8(_) => TypeKind::S8.into(),
+            Token::Bool(_) => TypeKind::Bool.into(),
             Token::Eof => Err(error_orphan!("Expected type but got end-of-file"))?,
             t => Err(error!(t.loc(), "Expected type!"))?,
         };

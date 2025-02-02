@@ -23,6 +23,7 @@ pub enum Op {
     Le,
     EqEq,
     NotEq,
+    And,
 }
 
 impl Op {
@@ -50,6 +51,7 @@ impl TryInto<Op> for char {
             ';' => Ok(Op::Semi),
             '>' => Ok(Op::Gt),
             '<' => Ok(Op::Lt),
+            '&' => Ok(Op::And),
             c => Err(error_orphan!("Could not convert to op: {c}")),
         }
     }
@@ -122,7 +124,23 @@ impl Expr {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum Type {
+pub struct Type {
+    pub kind: TypeKind,
+    pub indirection: u16, // How many pointers do we have
+}
+
+impl Into<Type> for TypeKind {
+    fn into(self) -> Type {
+        Type {
+            kind: self,
+            indirection: 0,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[repr(u16)]
+pub enum TypeKind {
     Void,
     U64,
     U32,
@@ -136,34 +154,65 @@ pub enum Type {
 }
 
 impl Type {
+    pub fn ptr(&self) -> Self {
+        Self {
+            kind: self.kind.clone(),
+            indirection: self.indirection + 1,
+        }
+    }
+
+    pub fn deref(&self) -> Self {
+        Self {
+            kind: self.kind.clone(),
+            indirection: self.indirection.checked_sub(1).unwrap_or(0),
+        }
+    }
+    
     pub fn qbe_type(&self) -> &str {
-        match self {
-            Type::U64 => "l",
-            Type::U32 | Type::U16 | Type::U8 => "w",
-            Type::S64 => "l",
-            Type::S32 | Type::S16 | Type::S8 => "w",
-            Type::Void | Type::Bool => "w",
+        if self.indirection > 0 {
+            return "l"; // Must be a pointer
+        }
+        match self.kind {
+            TypeKind::U64 => "l",
+            TypeKind::U32 | TypeKind::U16 | TypeKind::U8 => "w",
+            TypeKind::S64 => "l",
+            TypeKind::S32 | TypeKind::S16 | TypeKind::S8 => "w",
+            TypeKind::Void | TypeKind::Bool => "w",
+        }
+    }
+
+    pub fn sizeof(&self) -> usize {
+        if self.indirection > 0 {
+            return 8; // Must be a pointer
+        }
+        match self.kind {
+            TypeKind::U64 | TypeKind::S64 => 8,
+            TypeKind::U32 | TypeKind::S32 => 4,
+            TypeKind::U16 | TypeKind::S16 => 2,
+            TypeKind::U8  | TypeKind::S8 => 1,
+            TypeKind::Bool => 4,
+            TypeKind::Void => 0,
         }
     }
 
     pub fn assert_number(&self, loc: Location) -> Result<()> {
-        match self {
-            Type::U64 | Type::U32 | Type::U16 | Type::U8 |
-            Type::S64 | Type::S32 | Type::S16 | Type::S8 => Ok(()),
+        match self.kind {
+            TypeKind::U64 | TypeKind::U32 | TypeKind::U16 | TypeKind::U8 |
+            TypeKind::S64 | TypeKind::S32 | TypeKind::S16 | TypeKind::S8 => Ok(()),
             _ => Err(error!(loc, "Expected type to be a number")),
         }
     }
 
     pub fn assert_bool(&self, loc: Location) -> Result<()> {
-        match self {
-            Type::Bool => Ok(()),
+        match self.kind {
+            TypeKind::Bool => Ok(()),
             _ => Err(error!(loc, "Expected boolean")),
         }
     }
 
     pub fn unsigned(&self) -> bool {
-        match self {
-            Type::U64 | Type::U32 | Type::U16 | Type::U8 => true,
+        match self.kind {
+            TypeKind::U64 | TypeKind::U32 | TypeKind::U16 | TypeKind::U8 => true,
             _ => false,
         }
     }
