@@ -17,3 +17,4 @@
 ../target/debug/main ./functions.eve && ./b.out
 ../target/debug/main ./return_typecheck.eve && ./b.out
 ../target/debug/main ./addrof.eve && ./b.out
+../target/debug/main ./type_printing.eve && ./b.out

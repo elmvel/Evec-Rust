@@ -1,4 +1,4 @@
-:i count 19
+:i count 20
 :b shell 41
 ../target/debug/main ./dbg.eve && ./b.out
 :i returncode 0
@@ -58,7 +58,7 @@ Created executable b.out!
 :b stdout 0
 
 :b stderr 71
-./assignment.eve:14:5: error: Assignment expected S32, got U64 instead
+./assignment.eve:14:5: error: Assignment expected s32, got u64 instead
 
 :b shell 42
 ../target/debug/main ./bool.eve && ./b.out
@@ -220,14 +220,22 @@ Created executable b.out!
 :b stdout 0
 
 :b stderr 81
-./return_typecheck.eve:16:5: error: Expected to return Bool, but got S32 instead
+./return_typecheck.eve:16:5: error: Expected to return bool, but got s32 instead
 
 :b shell 44
 ../target/debug/main ./addrof.eve && ./b.out
 :i returncode 0
-:b stdout 37
+:b stdout 38
 Created executable b.out!
-1470111980
+-1313985332
 
 :b stderr 0
+
+:b shell 51
+../target/debug/main ./type_printing.eve && ./b.out
+:i returncode 1
+:b stdout 0
+
+:b stderr 78
+./type_printing.eve:10:5: error: Expected to return s32, but got bool instead
 

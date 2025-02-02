@@ -217,3 +217,23 @@ impl Type {
         }
     }
 }
+
+impl fmt::Display for Type {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        for _ in 0..self.indirection {
+            write!(f, "*")?;
+        }
+        match &self.kind {
+            TypeKind::Void => write!(f, "void"),
+            TypeKind::U64 => write!(f, "u64"),
+            TypeKind::U32 => write!(f, "u32"),
+            TypeKind::U16 => write!(f, "u16"),
+            TypeKind::U8 => write!(f, "u8"),
+            TypeKind::S64 => write!(f, "s64"),
+            TypeKind::S32 => write!(f, "s32"),
+            TypeKind::S16 => write!(f, "s16"),
+            TypeKind::S8 => write!(f, "s8"),
+            TypeKind::Bool => write!(f, "bool"),
+        }
+    }
+}

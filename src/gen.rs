@@ -227,7 +227,7 @@ macro_rules! gen_funcall_from_funcdef {
             // Type check arguments
             for i in 0..stack_values.len() {
                 if stack_values[i].typ != def.params.get(i).unwrap().1 {
-                    return Err(error!(def.params[i].0.loc(), "Parameter expected type {:?}, but got {:?} instead.", (def.params[i].1), (stack_values[i].typ)));
+                    return Err(error!(def.params[i].0.loc(), "Parameter expected type {}, but got {} instead.", (def.params[i].1), (stack_values[i].typ)));
                 }
             }
 
@@ -495,7 +495,7 @@ impl Generator {
                 
                 if let Some(expected_type) = typ {
                     if val.typ != expected_type {
-                        return Err(error!(loc, "Expected type {expected_type:?}, but got {:?} instead", (val.typ)));
+                        return Err(error!(loc, "Expected type {expected_type}, but got {} instead", (val.typ)));
                     }
                 }
                 
@@ -577,13 +577,13 @@ impl Generator {
                 if let Some(expr) = opt {
                     let val = self.emit_expr(comptime, expr, None)?;
                     if self.expected_return != val.typ {
-                        return Err(error!(loc, "Expected to return {:?}, but got {:?} instead", (self.expected_return.kind), (val.typ.kind)));
+                        return Err(error!(loc, "Expected to return {}, but got {} instead", (self.expected_return), (val.typ)));
                     }
                     genf!(self, "ret %.s{}", (val.tag));
                 } else {
                     if self.expected_return != TypeKind::Void.into() {
                         let void: Type = TypeKind::Void.into();
-                        return Err(error!(loc, "Expected to return {:?}, but got {:?} instead", (self.expected_return.kind), (void.kind)));
+                        return Err(error!(loc, "Expected to return {}, but got {} instead", (self.expected_return), (void)));
                     }
                     genf!(self, "ret");
                 }
@@ -692,7 +692,7 @@ impl Generator {
                         let new = self.emit_expr(comptime, *box_rhs, Some(val.typ.clone()))?;
                         if val.typ != new.typ {
                             // TODO: print types properly
-                            return Err(error!(loc, "Assignment expected {:?}, got {:?} instead", (val.typ.kind), (new.typ.kind)))
+                            return Err(error!(loc, "Assignment expected {}, got {} instead", (val.typ), (new.typ)))
                         }
                         // Redundant but necessary
                         let qtyp = new.typ.qbe_type();
