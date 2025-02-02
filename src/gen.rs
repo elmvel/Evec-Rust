@@ -329,6 +329,7 @@ impl Generator {
         genf!(self, "data $fmt_d = {{ b \"%d\\n\", b 0 }}");
         genf!(self, "data $fmt_ll = {{ b \"%lld\\n\", b 0 }}");
         genf!(self, "data $fmt_bool = {{ b \"bool: %d\\n\", b 0 }}");
+        genf!(self, "data $fmt_ptr = {{ b \"%p\\n\", b 0 }}");
         // for global in self.decorated_mod.globals.drain(..) {
         //     self.emit_global(global)?;
         // }
@@ -456,20 +457,23 @@ impl Generator {
             Stmt::Dbg(expr) => {
                 let val = self.emit_expr(comptime, expr, None)?;
 
-                match val.typ.kind {
-                    TypeKind::U64 | TypeKind::S64 => {
-                        genf!(self, "%.void =w call $printf(l $fmt_ll, ..., l %.s{})", val);
-                    },
-                    TypeKind::U32 | TypeKind::U16 | TypeKind::U8 |
-                    TypeKind::S32 | TypeKind::S16 | TypeKind::S8 => {
-                        genf!(self, "%.void =w call $printf(l $fmt_d, ..., w %.s{})", val);
-                    },
-                    TypeKind::Bool => {
-                        genf!(self, "%.void =w call $printf(l $fmt_bool, ..., w %.s{})", val);
-                    },
-                    TypeKind::Void => unreachable!(),
+                if val.typ.is_ptr() {
+                    genf!(self, "%.void =w call $printf(l $fmt_ptr, ..., l %.s{})", val);
+                } else {
+                    match val.typ.kind {
+                        TypeKind::U64 | TypeKind::S64 => {
+                            genf!(self, "%.void =w call $printf(l $fmt_ll, ..., l %.s{})", val);
+                        },
+                        TypeKind::U32 | TypeKind::U16 | TypeKind::U8 |
+                        TypeKind::S32 | TypeKind::S16 | TypeKind::S8 => {
+                            genf!(self, "%.void =w call $printf(l $fmt_d, ..., w %.s{})", val);
+                        },
+                        TypeKind::Bool => {
+                            genf!(self, "%.void =w call $printf(l $fmt_bool, ..., w %.s{})", val);
+                        },
+                        TypeKind::Void => unreachable!(),
+                    }
                 }
-                // TODO: match on stackvalue's type
                 Ok(())
             },
             Stmt::Let(name, typ, expr) => {
@@ -685,19 +689,39 @@ impl Generator {
                         Ok(StackValue{ typ: lval.typ, tag })
                     },
                     Op::Eq => {
-                        // Clone galore
-                        let Expr::Ident(Token::Ident(loc, text)) = *box_lhs else { return Err(error!(box_lhs.loc(), "Expected variable")) };
-                        let val = self.ctx.lookup(&text, loc.clone())?;
+                        match *box_lhs {
+                            Expr::Ident(Token::Ident(loc, text)) => {
+                                let val = self.ctx.lookup(&text, loc.clone())?;
 
-                        let new = self.emit_expr(comptime, *box_rhs, Some(val.typ.clone()))?;
-                        if val.typ != new.typ {
-                            // TODO: print types properly
-                            return Err(error!(loc, "Assignment expected {}, got {} instead", (val.typ), (new.typ)))
+                                let new = self.emit_expr(comptime, *box_rhs, Some(val.typ.clone()))?;
+                                if val.typ != new.typ {
+                                    // TODO: print types properly
+                                    return Err(error!(loc, "Assignment expected {}, got {} instead", (val.typ), (new.typ)))
+                                }
+                                // Redundant but necessary
+                                let qtyp = new.typ.qbe_type();
+                                genf!(self, "%.s{} ={qtyp} copy %.s{}", (val.tag), (new.tag));
+                                Ok(new)
+                            },
+                            Expr::UnOp(Op::Mul, box_expr) => {
+                                let loc = box_expr.loc();
+                                let ptr = self.emit_expr(comptime, *box_expr, None)?;
+                                
+                                if !ptr.typ.is_ptr() {
+                                    return Err(error!(loc, "Cannot dereference a non-pointer type {}", (ptr.typ)));
+                                }
+
+                                let new = self.emit_expr(comptime, *box_rhs, Some(ptr.typ.deref()))?;
+                                
+                                let deref = ptr.typ.deref();
+                                let qtype = deref.qbe_type();
+                                // TODO: won't be compatible with large data
+
+                                genf!(self, "store{qtype} %.s{}, %.s{}", (new.tag), (ptr.tag));
+                                Ok(new)
+                            },
+                            e => return Err(error!(e.loc(), "Expected variable or deref assignment")),
                         }
-                        // Redundant but necessary
-                        let qtyp = new.typ.qbe_type();
-                        genf!(self, "%.s{} ={qtyp} copy %.s{}", (val.tag), (new.tag));
-                        Ok(new)
                     },
                     Op::AndAnd => {
                         let lloc = box_lhs.loc();
@@ -809,10 +833,30 @@ impl Generator {
                                 // We should already allocate the variable as a pointer
                                 let Token::Ident(loc, text) = token else { unreachable!() };
                                 let val = self.ctx.lookup(&text, loc)?;
-                                Ok(val)
+                                Ok(StackValue{tag: val.tag, typ: val.typ.ptr()})
                             },
                             _ => unreachable!("Unsupported expr"),
                         }
+                    },
+                    Op::Mul => {
+                        let loc = box_expr.loc();
+                        let ptr = self.emit_expr(comptime, *box_expr, None)?;
+
+                        if !ptr.typ.is_ptr() {
+                            return Err(error!(loc, "Cannot dereference a non-pointer type {}", (ptr.typ)));
+                        }
+                        
+                        let tag = self.ctx.alloc();
+                        
+                        let deref = ptr.typ.deref();
+                        let qtype = deref.qbe_type();
+                        // TODO: won't be compatible with large data
+                        if deref.unsigned() {
+                            genf!(self, "%.s{tag} ={qtype} loadu{qtype} %.s{}", (ptr.tag));
+                        } else {
+                            genf!(self, "%.s{tag} ={qtype} loads{qtype} %.s{}", (ptr.tag));
+                        }
+                        Ok(StackValue{tag: tag, typ: deref})
                     },
                     c => todo!("op `{c:?}`"),
                 }

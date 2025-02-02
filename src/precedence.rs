@@ -22,7 +22,7 @@ pub fn infix_binding_power(op: Op) -> Option<(u8, u8)> {
 pub fn prefix_binding_power(op: Op) -> Result<((), u8)> {
     match op {
         Op::Add | Op::Sub => Ok(((), 15)),
-        Op::And => Ok(((), 17)),
+        Op::And | Op::Mul => Ok(((), 17)),
         _ => Err(error_orphan!("Bad expression op: {op:?}")),
     }
 }

@@ -154,6 +154,10 @@ pub enum TypeKind {
 }
 
 impl Type {
+    pub fn is_ptr(&self) -> bool {
+        self.indirection > 0
+    }
+    
     pub fn ptr(&self) -> Self {
         Self {
             kind: self.kind.clone(),

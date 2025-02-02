@@ -18,3 +18,4 @@
 ../target/debug/main ./return_typecheck.eve && ./b.out
 ../target/debug/main ./addrof.eve && ./b.out
 ../target/debug/main ./type_printing.eve && ./b.out
+../target/debug/main ./deref_and_assign.eve && ./b.out

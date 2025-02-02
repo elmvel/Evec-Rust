@@ -1,4 +1,4 @@
-:i count 20
+:i count 21
 :b shell 41
 ../target/debug/main ./dbg.eve && ./b.out
 :i returncode 0
@@ -225,9 +225,9 @@ Created executable b.out!
 :b shell 44
 ../target/debug/main ./addrof.eve && ./b.out
 :i returncode 0
-:b stdout 38
+:b stdout 41
 Created executable b.out!
--1313985332
+0x7ffebbeb9b3c
 
 :b stderr 0
 
@@ -238,4 +238,15 @@ Created executable b.out!
 
 :b stderr 78
 ./type_printing.eve:10:5: error: Expected to return s32, but got bool instead
+
+:b shell 54
+../target/debug/main ./deref_and_assign.eve && ./b.out
+:i returncode 0
+:b stdout 46
+Created executable b.out!
+0x7fffa96c1c2c
+5
+69
+
+:b stderr 0
 
