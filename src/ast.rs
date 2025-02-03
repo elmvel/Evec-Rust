@@ -173,7 +173,7 @@ impl Type {
     }
     
     pub fn qbe_type(&self) -> &str {
-        if self.indirection > 0 {
+        if self.is_ptr() {
             return "l"; // Must be a pointer
         }
         match self.kind {
@@ -186,8 +186,8 @@ impl Type {
     }
 
     pub fn sizeof(&self) -> usize {
-        if self.indirection > 0 {
-            return 8; // Must be a pointer
+        if self.is_ptr() {
+            return 8;
         }
         match self.kind {
             TypeKind::U64 | TypeKind::S64 => 8,
@@ -200,6 +200,9 @@ impl Type {
     }
 
     pub fn assert_number(&self, loc: Location) -> Result<()> {
+        if self.is_ptr() {
+            return Err(error!(loc, "Expected type to be a number"));
+        }
         match self.kind {
             TypeKind::U64 | TypeKind::U32 | TypeKind::U16 | TypeKind::U8 |
             TypeKind::S64 | TypeKind::S32 | TypeKind::S16 | TypeKind::S8 => Ok(()),
@@ -208,6 +211,9 @@ impl Type {
     }
 
     pub fn assert_bool(&self, loc: Location) -> Result<()> {
+        if self.is_ptr() {
+            return Err(error!(loc, "Expected boolean"));
+        }
         match self.kind {
             TypeKind::Bool => Ok(()),
             _ => Err(error!(loc, "Expected boolean")),

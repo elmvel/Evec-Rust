@@ -19,3 +19,4 @@
 ../target/debug/main ./addrof.eve && ./b.out
 ../target/debug/main ./type_printing.eve && ./b.out
 ../target/debug/main ./deref_and_assign.eve && ./b.out
+../target/debug/main ./pointer_type_annotation.eve && ./b.out

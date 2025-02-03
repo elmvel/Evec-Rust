@@ -3,5 +3,5 @@ module hello;
 main :: fn() {
     let x = 5;
     let y = &x;
-    dbg y;
+    dbg *y;
 }
