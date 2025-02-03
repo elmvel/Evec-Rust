@@ -1,4 +1,4 @@
-:i count 22
+:i count 23
 :b shell 41
 ../target/debug/main ./dbg.eve && ./b.out
 :i returncode 0
@@ -242,9 +242,9 @@ Created executable b.out!
 :b shell 54
 ../target/debug/main ./deref_and_assign.eve && ./b.out
 :i returncode 0
-:b stdout 46
+:b stdout 33
 Created executable b.out!
-0x7ffd17032cdc
+5
 5
 69
 
@@ -257,4 +257,13 @@ Created executable b.out!
 
 :b stderr 82
 ./pointer_type_annotation.eve:5:9: error: Expected type *s32, but got s32 instead
+
+:b shell 45
+../target/debug/main ./nullptr.eve && ./b.out
+:i returncode 0
+:b stdout 32
+Created executable b.out!
+(nil)
+
+:b stderr 0
 

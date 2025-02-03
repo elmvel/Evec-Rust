@@ -106,6 +106,7 @@ pub enum Expr {
     UnOp(Op, Box<Expr>),
     Func(Vec<Param>, Option<Type>, Vec<Stmt>), // Eventually Func(Token, Vec<Param>, RetType, Vec<Stmt>)
     Call(Box<Expr>, Vec<Expr>), // TODO: add parameters
+    Null(Token),
 }
 
 impl Expr {
@@ -119,6 +120,7 @@ impl Expr {
             Expr::UnOp(_, expr) => expr.loc(),
             Expr::Func(_, _, _) => todo!(),
             Expr::Call(t, _) => t.loc(),
+            Expr::Null(t) => t.loc(),
         }
     }
 }

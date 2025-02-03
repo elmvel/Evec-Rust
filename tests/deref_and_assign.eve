@@ -4,7 +4,7 @@ main :: fn() {
     let x = 5;
     let y = &x;
     let z = *y;
-    dbg y;
+    dbg *y;
     dbg z;
     *y = 69;
     dbg x;

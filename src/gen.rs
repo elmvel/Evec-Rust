@@ -896,6 +896,16 @@ impl Generator {
                     _ => return Err(error_orphan!("Got a function call without an identifier")),
                 }
             },
+            Expr::Null(token) => {
+                if let Some(typ) = expected_type {
+                    let tag = self.ctx.alloc();
+                    
+                    genf!(self, "%.s{tag} =l copy 0");
+                    Ok(StackValue{tag, typ})
+                } else {
+                    Err(error!(token.loc(), "Cannot infer type of null pointer"))
+                }
+            },
         }
     }
 

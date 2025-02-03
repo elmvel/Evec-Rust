@@ -77,6 +77,7 @@ impl Decorator {
                     Self::gav_expr(expr, addrvars);
                 }
             },
+            Expr::Null(_) => { () },
         }
     }
 

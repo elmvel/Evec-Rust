@@ -26,6 +26,7 @@ pub enum Token {
     Break(Location),
     Continue(Location),
     Return(Location),
+    Null(Location),
 
     // Types
     U64(Location),
@@ -65,6 +66,7 @@ impl Token {
             Token::Break(loc) => loc.clone(),
             Token::Continue(loc) => loc.clone(),
             Token::Return(loc) => loc.clone(),
+            Token::Null(loc) => loc.clone(),
             Token::U64(loc) => loc.clone(),
             Token::U32(loc) => loc.clone(),
             Token::U16(loc) => loc.clone(),
@@ -237,6 +239,7 @@ impl Lexer {
             "break" => Token::Break(loc),
             "continue" => Token::Continue(loc),
             "return" => Token::Return(loc),
+            "null" => Token::Null(loc),
 
             "u64" => Token::U64(loc),
             "u32" => Token::U32(loc),
