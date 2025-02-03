@@ -21,3 +21,4 @@
 ../target/debug/main ./deref_and_assign.eve && ./b.out
 ../target/debug/main ./pointer_type_annotation.eve && ./b.out
 ../target/debug/main ./nullptr.eve && ./b.out
+../target/debug/main ./ptr_functions.eve && ./b.out

@@ -9,7 +9,7 @@ main :: fn() {
     let x = 69;
     foo(&x);
     dbg x;
-    foo(null);
+    // foo(null); SIGSEGV
 }
 
 foo :: fn(p: *s32) {

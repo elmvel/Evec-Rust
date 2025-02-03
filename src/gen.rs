@@ -220,8 +220,8 @@ macro_rules! gen_funcall_from_funcdef {
 
             // Generate expressions
             let mut stack_values = Vec::new();
-            for expr in $args.drain(..) {
-                stack_values.push($slf.emit_expr($comptime, expr, None)?);
+            for (i, expr) in $args.drain(..).enumerate() {
+                stack_values.push($slf.emit_expr($comptime, expr, Some(def.params.get(i).unwrap().1.clone()))?);
             }
 
             // Type check arguments

@@ -1,4 +1,4 @@
-:i count 23
+:i count 24
 :b shell 41
 ../target/debug/main ./dbg.eve && ./b.out
 :i returncode 0
@@ -264,6 +264,16 @@ Created executable b.out!
 :b stdout 32
 Created executable b.out!
 (nil)
+
+:b stderr 0
+
+:b shell 51
+../target/debug/main ./ptr_functions.eve && ./b.out
+:i returncode 0
+:b stdout 35
+Created executable b.out!
+1337
+420
 
 :b stderr 0
 
