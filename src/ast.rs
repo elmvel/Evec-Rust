@@ -196,7 +196,7 @@ impl Type {
             kind: self.kind.clone(),
             indirection: self.indirection + 1,
             struct_kind: self.struct_kind.clone(),
-            elements: 0,
+            elements: self.elements,
             inner: self.inner.clone(),
         }
     }
@@ -206,7 +206,7 @@ impl Type {
             kind: self.kind.clone(),
             indirection: self.indirection.checked_sub(1).unwrap_or(0),
             struct_kind: self.struct_kind.clone(),
-            elements: 0,
+            elements: self.elements,
             inner: self.inner.clone(),
         }
     }

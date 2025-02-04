@@ -516,10 +516,15 @@ impl Generator {
             }
         } else {
             let tag = self.ctx.alloc();
-            if typ.unsigned() {
-                genf!(self, "%.s{tag} ={qtype} loadu{qtype} {from_fmt}");
+            // TODO: no floating point is checked here
+            if typ.sizeof() == 8 {
+                genf!(self, "%.s{tag} ={qtype} load{qtype} {from_fmt}");
             } else {
-                genf!(self, "%.s{tag} ={qtype} loads{qtype} {from_fmt}");
+                if typ.unsigned() {
+                    genf!(self, "%.s{tag} ={qtype} loadu{qtype} {from_fmt}");
+                } else {
+                    genf!(self, "%.s{tag} ={qtype} loads{qtype} {from_fmt}");
+                }
             }
             return tag;
         }

@@ -23,3 +23,4 @@
 ../target/debug/main ./nullptr.eve && ./b.out
 ../target/debug/main ./ptr_functions.eve && ./b.out
 ../target/debug/main ./array1.eve && ./b.out
+../target/debug/main ./array2.eve && ./b.out
