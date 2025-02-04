@@ -1,4 +1,4 @@
-:i count 26
+:i count 27
 :b shell 41
 ../target/debug/main ./dbg.eve && ./b.out
 :i returncode 0
@@ -309,7 +309,7 @@ Created executable b.out!
 :b shell 44
 ../target/debug/main ./array2.eve && ./b.out
 :i returncode 0
-:b stdout 140
+:b stdout 102
 Created executable b.out!
 {
 1
@@ -344,13 +344,18 @@ Created executable b.out!
 3
 }
 }
-{
-0x7fffee551ac4
-}
 101010101
-{
-0x7fffee551ac4
-}
+
+:b stderr 0
+
+:b shell 44
+../target/debug/main ./array3.eve && ./b.out
+:i returncode 0
+:b stdout 32
+Created executable b.out!
+1
+2
+3
 
 :b stderr 0
 

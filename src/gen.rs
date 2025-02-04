@@ -887,6 +887,56 @@ impl Generator {
                         }
                         Ok(StackValue{ tag, typ: TypeKind::Bool.into() })
                     },
+                    Op::Arr => {
+                        let lloc = box_lhs.loc();
+                        let rloc = box_rhs.loc();
+                        
+                        let lval = self.emit_expr(comptime, *box_lhs, None)?;
+                        let rval = self.emit_expr(comptime, *box_rhs, None)?;
+                        lval.typ.assert_indexable(lloc)?;
+                        rval.typ.assert_number(rloc)?;
+                        
+                        // We need the index to be a 64 bit value
+                        // TODO: maybe factor this out too?
+                        let rtag = match rval.typ.sizeof() {
+                            1 => {
+                                let t = self.ctx.alloc();
+                                if rval.typ.unsigned() {
+                                    genf!(self, "%.s{t} =l extub %.s{rval}");
+                                } else {
+                                    genf!(self, "%.s{t} =l extsb %.s{rval}");
+                                }
+                                t
+                            },
+                            2 => {
+                                let t = self.ctx.alloc();
+                                if rval.typ.unsigned() {
+                                    genf!(self, "%.s{t} =l extuh %.s{rval}");
+                                } else {
+                                    genf!(self, "%.s{t} =l extsh %.s{rval}");
+                                }
+                                t
+                            },
+                            4 => {
+                                let t = self.ctx.alloc();
+                                if rval.typ.unsigned() {
+                                    genf!(self, "%.s{t} =l extuw %.s{rval}");
+                                } else {
+                                    genf!(self, "%.s{t} =l extsw %.s{rval}");
+                                }
+                                t
+                            },
+                            _ => rval.tag,
+                        };
+                        
+                        let bytes = self.ctx.alloc();
+                        let ptr = self.ctx.alloc();
+                        let Some(ref inner) = lval.typ.inner else { unreachable!() };
+                        genf!(self, "%.s{bytes} =l mul %.s{rtag}, {}", (inner.sizeof()));
+                        genf!(self, "%.s{ptr} =l add %.s{lval}, %.s{bytes}");
+                        let tag = self.load_type(inner, ptr, format!("%.s{ptr}"));
+                        Ok(StackValue{tag, typ: *inner.clone()})
+                    },
                     _ => todo!()
                 }
             },

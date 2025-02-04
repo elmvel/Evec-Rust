@@ -11,9 +11,9 @@ main :: fn() {
     dbg *arr4;
     let x = 5;
     let a: [1]*s32 = {&x};
-    dbg a;
+    // dbg a; works but changes every run bcs pointer
     dbg 101010101; // Separator
-    foo(a);
+    // foo(a); works but changes every run bcs pointer
 }
 
 foo :: fn(x: [1]*s32) {

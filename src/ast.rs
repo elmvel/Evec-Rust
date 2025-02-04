@@ -276,6 +276,20 @@ impl Type {
         }
     }
 
+    pub fn assert_indexable(&self, loc: Location) -> Result<()> {
+        if self.is_ptr() {
+            return Ok(());
+        }
+        if self.is_struct() {
+            match self.struct_kind {
+                StructKind::Array => { Ok(()) },
+                _ => todo!("Probably allow slices too, but nothing else (maybe strings)"),
+            }
+        } else {
+            Err(error!(loc, "Cannot index type {self}"))
+        }
+    }
+
     pub fn unsigned(&self) -> bool {
         match self.kind {
             TypeKind::U64 | TypeKind::U32 | TypeKind::U16 | TypeKind::U8 => true,
