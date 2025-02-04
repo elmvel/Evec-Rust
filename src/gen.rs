@@ -331,7 +331,7 @@ impl Generator {
         genf!(self, "data $fmt_bool = {{ b \"bool: %d\\n\", b 0 }}");
         genf!(self, "data $fmt_ptr = {{ b \"%p\\n\", b 0 }}");
         genf!(self, "data $fmt_arr_start = {{ b \"{{\\n\", b 0 }}");
-        genf!(self, "data $fmt_arr_end = {{ b \"{{\\n\", b 0 }}");
+        genf!(self, "data $fmt_arr_end = {{ b \"}}\\n\", b 0 }}");
         // for global in self.decorated_mod.globals.drain(..) {
         //     self.emit_global(global)?;
         // }
@@ -454,21 +454,20 @@ impl Generator {
         Ok(())
     }
     
-    fn dbg_print_val(&mut self, comptime: &mut Compiletime, val: StackValue, suffix: Option<&str>) -> Result<()> {
-        let suf = suffix.unwrap_or("");
+    fn dbg_print_val(&mut self, comptime: &mut Compiletime, val: StackValue) -> Result<()> {
         if val.typ.is_ptr() {
-            genf!(self, "%.void =w call $printf(l $fmt_ptr, ..., l %.s{}{suf})", val);
+            genf!(self, "%.void =w call $printf(l $fmt_ptr, ..., l %.s{})", val);
         } else {
             match val.typ.kind {
                 TypeKind::U64 | TypeKind::S64 => {
-                    genf!(self, "%.void =w call $printf(l $fmt_ll, ..., l %.s{}{suf})", val);
+                    genf!(self, "%.void =w call $printf(l $fmt_ll, ..., l %.s{})", val);
                 },
                 TypeKind::U32 | TypeKind::U16 | TypeKind::U8 |
                 TypeKind::S32 | TypeKind::S16 | TypeKind::S8 => {
-                    genf!(self, "%.void =w call $printf(l $fmt_d, ..., w %.s{}{suf})", val);
+                    genf!(self, "%.void =w call $printf(l $fmt_d, ..., w %.s{})", val);
                 },
                 TypeKind::Bool => {
-                    genf!(self, "%.void =w call $printf(l $fmt_bool, ..., w %.s{}{suf})", val);
+                    genf!(self, "%.void =w call $printf(l $fmt_bool, ..., w %.s{})", val);
                 },
                 TypeKind::Void => unreachable!(),
                 TypeKind::Structure => {
@@ -479,15 +478,14 @@ impl Generator {
                             // MAJOR TODO: get rid of suffix
                             genf!(self, "%.void =w call $printf(l $fmt_arr_start, ...)");
                             for i in 0..val.typ.elements {
-                                let suffix = &format!(".idx.{i}");
-                                let tag = self.ctx.alloc();
-                                let qtype = inner.qbe_type();
-                                if inner.unsigned() {
-                                    genf!(self, "%.s{tag} ={qtype} loadu{qtype} %.s{val}.idx.{i}");
-                                } else {
-                                    genf!(self, "%.s{tag} ={qtype} loads{qtype} %.s{val}.idx.{i}");
-                                }
-                                self.dbg_print_val(comptime, StackValue{tag, typ: *val.typ.inner.clone().unwrap()}, None);
+                                let tag = self.load_type(inner, val.tag, format!("%.s{val}.idx.{i}"));
+                                // let qtype = inner.qbe_type();
+                                // if inner.unsigned() {
+                                //     genf!(self, "%.s{tag} ={qtype} loadu{qtype} %.s{val}.idx.{i}");
+                                // } else {
+                                //     genf!(self, "%.s{tag} ={qtype} loads{qtype} %.s{val}.idx.{i}");
+                                // }
+                                self.dbg_print_val(comptime, StackValue{tag, typ: *val.typ.inner.clone().unwrap()});
                             }
                             genf!(self, "%.void =w call $printf(l $fmt_arr_end, ...)");
                         },
@@ -499,11 +497,56 @@ impl Generator {
         Ok(())
     }
 
+    fn load_type(&mut self, typ: &Type, from_tag: usize, from_fmt: String) -> usize {
+        let qtype = typ.qbe_type();
+        if typ.is_struct() {
+            match typ.struct_kind {
+                StructKind::Array => {
+                    let Some(ref inner) = typ.inner else { unreachable!() };
+                    let tag = self.ctx.alloc();
+                    genf!(self, "%.s{tag} ={qtype} copy {from_fmt}"); 
+                    genf!(self, "%.s{tag}.idx.0 =l copy %.s{tag}");
+                    for i in 1..typ.elements {
+                        let bytes = i * inner.sizeof();
+                        genf!(self, "%.s{tag}.idx.{i} =l add %.s{tag}, {bytes}");
+                    }
+                    tag
+                },
+                _ => todo!()
+            }
+        } else {
+            let tag = self.ctx.alloc();
+            if typ.unsigned() {
+                genf!(self, "%.s{tag} ={qtype} loadu{qtype} {from_fmt}");
+            } else {
+                genf!(self, "%.s{tag} ={qtype} loads{qtype} {from_fmt}");
+            }
+            return tag;
+        }
+    }
+
+    fn store_type(&mut self, typ: &Type, from_tag: usize, to_fmt: String) {
+        if typ.is_struct() {
+            match typ.struct_kind {
+                StructKind::Array => {
+                    let Some(ref inner) = typ.inner else { unreachable!() };
+                    //let tag = self.ctx.alloc();
+                    let bytes = typ.elements * inner.sizeof();
+                    genf!(self, "blit %.s{from_tag}, {to_fmt}, {bytes}");
+                },
+                _ => todo!()
+            }
+        } else {
+            let qtype = typ.qbe_type();
+            genf!(self, "store{qtype} %.s{from_tag}, {to_fmt}");
+        }
+    }
+
     pub fn emit_stmt(&mut self, comptime: &mut Compiletime, stmt: Stmt) -> Result<()> {
         match stmt {
             Stmt::Dbg(expr) => {
                 let val = self.emit_expr(comptime, expr, None)?;
-                self.dbg_print_val(comptime, val, None);
+                self.dbg_print_val(comptime, val);
                 Ok(())
             },
             Stmt::Let(name, typ, expr) => {
@@ -521,7 +564,8 @@ impl Generator {
                     let tag = self.ctx.alloc();
                     // TODO: alignment
                     genf!(self, "%.s{tag} =l alloc4 {}", (expr.typ.sizeof()));
-                    genf!(self, "store{} %.s{}, %.s{tag}", (expr.typ.qbe_type()), (expr.tag));
+                    self.store_type(&expr.typ, expr.tag, format!("%.s{tag}"));
+                    //genf!(self, "store{} %.s{}, %.s{tag}", (expr.typ.qbe_type()), (expr.tag));
                     StackValue{tag, typ: expr.typ}
                 } else {
                     expr
@@ -640,15 +684,15 @@ impl Generator {
 
                 let val = self.ctx.lookup(&text, loc)?;
                 if allocated {
-                    let tag = self.ctx.alloc();
                     let deref = val.typ.deref();
-                    let qtype = deref.qbe_type();
-                    // TODO: won't be compatible with large data
-                    if val.typ.unsigned() {
-                        genf!(self, "%.s{tag} ={qtype} loadu{qtype} %.s{}", (val.tag));
-                    } else {
-                        genf!(self, "%.s{tag} ={qtype} loads{qtype} %.s{}", (val.tag));
-                    }
+                    // let qtype = deref.qbe_type();
+                    // // TODO: won't be compatible with large data
+                    // if val.typ.unsigned() {
+                    //     genf!(self, "%.s{tag} ={qtype} loadu{qtype} %.s{}", (val.tag));
+                    // } else {
+                    //     genf!(self, "%.s{tag} ={qtype} loads{qtype} %.s{}", (val.tag));
+                    // }
+                    let tag = self.load_type(&deref, val.tag, format!("%.s{val}"));
                     Ok(StackValue{tag, typ: val.typ})
                 } else {
                     Ok(val)
@@ -747,7 +791,8 @@ impl Generator {
                                 let qtype = deref.qbe_type();
                                 // TODO: won't be compatible with large data
 
-                                genf!(self, "store{qtype} %.s{}, %.s{}", (new.tag), (ptr.tag));
+                                // genf!(self, "store{qtype} %.s{}, %.s{}", (new.tag), (ptr.tag));
+                                self.store_type(&deref, new.tag, format!("%.s{ptr}"));
                                 Ok(new)
                             },
                             e => return Err(error!(e.loc(), "Expected variable or deref assignment")),
@@ -876,16 +921,15 @@ impl Generator {
                             return Err(error!(loc, "Cannot dereference a non-pointer type {}", (ptr.typ)));
                         }
                         
-                        let tag = self.ctx.alloc();
-                        
                         let deref = ptr.typ.deref();
-                        let qtype = deref.qbe_type();
-                        // TODO: won't be compatible with large data
-                        if deref.unsigned() {
-                            genf!(self, "%.s{tag} ={qtype} loadu{qtype} %.s{}", (ptr.tag));
-                        } else {
-                            genf!(self, "%.s{tag} ={qtype} loads{qtype} %.s{}", (ptr.tag));
-                        }
+                        // let qtype = deref.qbe_type();
+                        // // TODO: won't be compatible with large data
+                        // if deref.unsigned() {
+                        //     genf!(self, "%.s{tag} ={qtype} loadu{qtype} %.s{}", (ptr.tag));
+                        // } else {
+                        //     genf!(self, "%.s{tag} ={qtype} loads{qtype} %.s{}", (ptr.tag));
+                        // }
+                        let tag = self.load_type(&deref, ptr.tag, format!("%.s{ptr}"));
                         Ok(StackValue{tag: tag, typ: deref})
                     },
                     c => todo!("op `{c:?}`"),
@@ -976,7 +1020,8 @@ impl Generator {
                                     return Err(error!(token.loc(), "Expected {} for array member, got {} instead", (*inner), (val.typ)));
                                 }
                                 let qtype = val.typ.qbe_type();
-                                genf!(self, "store{qtype} {val}, %.s{tag}.idx.{i}");
+                                // genf!(self, "store{qtype} %.s{val}, %.s{tag}.idx.{i}");
+                                self.store_type(&val.typ, val.tag, format!("%.s{tag}.idx.{i}"));
                             }
                             Ok(StackValue{tag, typ})
                         },

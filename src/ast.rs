@@ -183,6 +183,10 @@ impl Type {
         }
     }
 
+    pub fn is_struct(&self) -> bool {
+        self.kind == TypeKind::Structure
+    }
+
     pub fn is_ptr(&self) -> bool {
         self.indirection > 0
     }
@@ -217,7 +221,14 @@ impl Type {
             TypeKind::S64 => "l",
             TypeKind::S32 | TypeKind::S16 | TypeKind::S8 => "w",
             TypeKind::Void | TypeKind::Bool => "w",
-            TypeKind::Structure => todo!("Should be able to determine the structure qbe type based on the struct id"),
+            TypeKind::Structure => {
+                match self.struct_kind {
+                    StructKind::Array => {
+                        "l"
+                    },
+                    _ => todo!("Should be able to determine the structure qbe type based on the struct id"),
+                }
+            },
         }
     }
 
@@ -232,7 +243,15 @@ impl Type {
             TypeKind::U8  | TypeKind::S8 => 1,
             TypeKind::Bool => 4,
             TypeKind::Void => 0,
-            TypeKind::Structure => todo!("need to lookup in some strucure table"),
+            TypeKind::Structure => {
+                match self.struct_kind {
+                    StructKind::Array => {
+                        let Some(ref inner) = self.inner else { unreachable!() };
+                        self.elements * inner.sizeof()
+                    },
+                    _ => todo!("need to lookup in some strucure table"),
+                }
+            },
         }
     }
 
@@ -281,11 +300,15 @@ impl fmt::Display for Type {
             TypeKind::S16 => write!(f, "s16"),
             TypeKind::S8 => write!(f, "s8"),
             TypeKind::Bool => write!(f, "bool"),
-            // TypeKind::Array => {
-            //     let Some(ref inner) = self.inner else { unreachable!("idk how to error out here") };
-            //     write!(f, "[{}]{}", self.elements, *inner)
-            // }, 
-            TypeKind::Structure => todo!("Another structure table call"),
+            TypeKind::Structure => {
+                match self.struct_kind {
+                    StructKind::Array => {
+                        let Some(ref inner) = self.inner else { unreachable!("idk how to error out here") };
+                        write!(f, "[{}]{}", self.elements, *inner)
+                    }, 
+                    _ => todo!("Another structure table call"),
+                }
+            },
         }
     }
 }
