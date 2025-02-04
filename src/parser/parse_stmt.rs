@@ -62,6 +62,15 @@ impl Parser {
     pub fn parse_type(&mut self) -> Result<Type> {
         if self.lexer.eat(Token::Op(ldef!(), '*')) {
             Ok(self.parse_type()?.ptr())
+        } else if self.lexer.eat(Token::Op(ldef!(), '[')) {
+            let size = self.parse_expr()?;
+            let Expr::Number(Token::Int(_, n)) = size else {
+                // TODO: constexpr
+                return Err(error!(size.loc(), "Expected numerical constant here!"));
+            };
+            self.expect(Token::Op(ldef!(), ']'))?;
+            let inner = self.parse_type()?;
+            Ok(Type::wrap(inner, StructKind::Array, Some(n as usize)))
         } else {
             let typ = match self.lexer.next() {
                 Token::U64(_) => TypeKind::U64.into(),

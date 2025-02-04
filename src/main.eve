@@ -1,22 +1,10 @@
 module hello;
 
 main :: fn() {
-    // Dangerous!
-    let y = bar();
-    *y = 1337;
-    dbg *y;
-    
-    let x = 69;
-    foo(&x);
-    dbg x;
-    foo(null);
-}
-
-foo :: fn(p: *s32) {
-    *p = 420;
-}
-
-bar :: fn() -> *s32 {
-    let x = 5;
-    return &x;
+    let arr: [3]u32 = {1, 2, 3};
+    dbg arr;
+    // Interesting
+    // Clean up suffix crap and we can probably commit this for now
+    let arr2: [1][3]u32 = {{1, 2, 3}};
+    dbg arr2;
 }

@@ -107,6 +107,7 @@ pub enum Expr {
     Func(Vec<Param>, Option<Type>, Vec<Stmt>), // Eventually Func(Token, Vec<Param>, RetType, Vec<Stmt>)
     Call(Box<Expr>, Vec<Expr>), // TODO: add parameters
     Null(Token),
+    InitList(Token, Vec<Expr>), // First token is just for easy location
 }
 
 impl Expr {
@@ -121,6 +122,7 @@ impl Expr {
             Expr::Func(_, _, _) => todo!(),
             Expr::Call(t, _) => t.loc(),
             Expr::Null(t) => t.loc(),
+            Expr::InitList(t, _) => t.loc(),
         }
     }
 }
@@ -128,7 +130,11 @@ impl Expr {
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Type {
     pub kind: TypeKind,
-    pub indirection: u16, // How many pointers do we have
+    pub indirection: u8, // How many pointers do we have
+    pub struct_kind: StructKind,
+    // pub inner_type: u64, // We don't need this to exist now, but it should point to the typekind of the inner field?
+    pub elements: usize, // Compile time only
+    pub inner: Option<Box<Type>>,
 }
 
 impl Into<Type> for TypeKind {
@@ -136,12 +142,15 @@ impl Into<Type> for TypeKind {
         Type {
             kind: self,
             indirection: 0,
+            struct_kind: StructKind::CountStructs,
+            elements: 0,
+            inner: None,
         }
     }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-#[repr(u16)]
+#[repr(u8)]
 pub enum TypeKind {
     Void,
     U64,
@@ -153,9 +162,27 @@ pub enum TypeKind {
     S16,
     S8,
     Bool,
+    Structure,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[repr(u8)]
+pub enum StructKind {
+    Array,
+    CountStructs,
 }
 
 impl Type {
+    pub fn wrap(typ: Type, struct_kind: StructKind, elements: Option<usize>) -> Self {
+        Self {
+            kind: TypeKind::Structure,
+            indirection: 0,
+            struct_kind: struct_kind,
+            elements: elements.unwrap_or(0),
+            inner: Some(Box::new(typ)),
+        }
+    }
+
     pub fn is_ptr(&self) -> bool {
         self.indirection > 0
     }
@@ -164,6 +191,9 @@ impl Type {
         Self {
             kind: self.kind.clone(),
             indirection: self.indirection + 1,
+            struct_kind: self.struct_kind.clone(),
+            elements: 0,
+            inner: self.inner.clone(),
         }
     }
 
@@ -171,6 +201,9 @@ impl Type {
         Self {
             kind: self.kind.clone(),
             indirection: self.indirection.checked_sub(1).unwrap_or(0),
+            struct_kind: self.struct_kind.clone(),
+            elements: 0,
+            inner: self.inner.clone(),
         }
     }
     
@@ -184,6 +217,7 @@ impl Type {
             TypeKind::S64 => "l",
             TypeKind::S32 | TypeKind::S16 | TypeKind::S8 => "w",
             TypeKind::Void | TypeKind::Bool => "w",
+            TypeKind::Structure => todo!("Should be able to determine the structure qbe type based on the struct id"),
         }
     }
 
@@ -198,6 +232,7 @@ impl Type {
             TypeKind::U8  | TypeKind::S8 => 1,
             TypeKind::Bool => 4,
             TypeKind::Void => 0,
+            TypeKind::Structure => todo!("need to lookup in some strucure table"),
         }
     }
 
@@ -246,6 +281,11 @@ impl fmt::Display for Type {
             TypeKind::S16 => write!(f, "s16"),
             TypeKind::S8 => write!(f, "s8"),
             TypeKind::Bool => write!(f, "bool"),
+            // TypeKind::Array => {
+            //     let Some(ref inner) = self.inner else { unreachable!("idk how to error out here") };
+            //     write!(f, "[{}]{}", self.elements, *inner)
+            // }, 
+            TypeKind::Structure => todo!("Another structure table call"),
         }
     }
 }

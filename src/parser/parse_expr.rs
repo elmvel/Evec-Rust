@@ -66,6 +66,18 @@ impl Parser {
                     self.expect(Token::Op(ldef!(), ')'))?;
                     lhs?
                 },
+                Token::Op(loc, '{') => {
+                    let mut exprs = Vec::new();
+                    while self.lexer.peek() != Token::Op(ldef!(), '}') {
+                        let expr = self.parse_expr()?;
+                        if self.lexer.peek() != Token::Op(ldef!(), '}') {
+                            self.expect(Token::Op(ldef!(), ','))?;
+                        }
+                        exprs.push(expr);
+                    }
+                    self.expect(Token::Op(ldef!(), '}'))?;
+                    Expr::InitList(Token::Op(loc, '{'), exprs)
+                },
                 Token::Op(_, op) => {
                     let ((), r_bp) = prefix_binding_power(op.try_into()?)?;
                     let rhs = self.parse_expr_bp(r_bp);

@@ -330,6 +330,8 @@ impl Generator {
         genf!(self, "data $fmt_ll = {{ b \"%lld\\n\", b 0 }}");
         genf!(self, "data $fmt_bool = {{ b \"bool: %d\\n\", b 0 }}");
         genf!(self, "data $fmt_ptr = {{ b \"%p\\n\", b 0 }}");
+        genf!(self, "data $fmt_arr_start = {{ b \"{{\\n\", b 0 }}");
+        genf!(self, "data $fmt_arr_end = {{ b \"{{\\n\", b 0 }}");
         // for global in self.decorated_mod.globals.drain(..) {
         //     self.emit_global(global)?;
         // }
@@ -451,29 +453,57 @@ impl Generator {
         self.pop_frame();
         Ok(())
     }
+    
+    fn dbg_print_val(&mut self, comptime: &mut Compiletime, val: StackValue, suffix: Option<&str>) -> Result<()> {
+        let suf = suffix.unwrap_or("");
+        if val.typ.is_ptr() {
+            genf!(self, "%.void =w call $printf(l $fmt_ptr, ..., l %.s{}{suf})", val);
+        } else {
+            match val.typ.kind {
+                TypeKind::U64 | TypeKind::S64 => {
+                    genf!(self, "%.void =w call $printf(l $fmt_ll, ..., l %.s{}{suf})", val);
+                },
+                TypeKind::U32 | TypeKind::U16 | TypeKind::U8 |
+                TypeKind::S32 | TypeKind::S16 | TypeKind::S8 => {
+                    genf!(self, "%.void =w call $printf(l $fmt_d, ..., w %.s{}{suf})", val);
+                },
+                TypeKind::Bool => {
+                    genf!(self, "%.void =w call $printf(l $fmt_bool, ..., w %.s{}{suf})", val);
+                },
+                TypeKind::Void => unreachable!(),
+                TypeKind::Structure => {
+                    match val.typ.struct_kind {
+                        StructKind::Array => {
+                            let Some(ref inner) = val.typ.inner else { unreachable!() };
+
+                            // MAJOR TODO: get rid of suffix
+                            genf!(self, "%.void =w call $printf(l $fmt_arr_start, ...)");
+                            for i in 0..val.typ.elements {
+                                let suffix = &format!(".idx.{i}");
+                                let tag = self.ctx.alloc();
+                                let qtype = inner.qbe_type();
+                                if inner.unsigned() {
+                                    genf!(self, "%.s{tag} ={qtype} loadu{qtype} %.s{val}.idx.{i}");
+                                } else {
+                                    genf!(self, "%.s{tag} ={qtype} loads{qtype} %.s{val}.idx.{i}");
+                                }
+                                self.dbg_print_val(comptime, StackValue{tag, typ: *val.typ.inner.clone().unwrap()}, None);
+                            }
+                            genf!(self, "%.void =w call $printf(l $fmt_arr_end, ...)");
+                        },
+                        _ => todo!("generic printing of structures")
+                    }
+                },
+            }
+        }
+        Ok(())
+    }
 
     pub fn emit_stmt(&mut self, comptime: &mut Compiletime, stmt: Stmt) -> Result<()> {
         match stmt {
             Stmt::Dbg(expr) => {
                 let val = self.emit_expr(comptime, expr, None)?;
-
-                if val.typ.is_ptr() {
-                    genf!(self, "%.void =w call $printf(l $fmt_ptr, ..., l %.s{})", val);
-                } else {
-                    match val.typ.kind {
-                        TypeKind::U64 | TypeKind::S64 => {
-                            genf!(self, "%.void =w call $printf(l $fmt_ll, ..., l %.s{})", val);
-                        },
-                        TypeKind::U32 | TypeKind::U16 | TypeKind::U8 |
-                        TypeKind::S32 | TypeKind::S16 | TypeKind::S8 => {
-                            genf!(self, "%.void =w call $printf(l $fmt_d, ..., w %.s{})", val);
-                        },
-                        TypeKind::Bool => {
-                            genf!(self, "%.void =w call $printf(l $fmt_bool, ..., w %.s{})", val);
-                        },
-                        TypeKind::Void => unreachable!(),
-                    }
-                }
+                self.dbg_print_val(comptime, val, None);
                 Ok(())
             },
             Stmt::Let(name, typ, expr) => {
@@ -904,6 +934,56 @@ impl Generator {
                     Ok(StackValue{tag, typ})
                 } else {
                     Err(error!(token.loc(), "Cannot infer type of null pointer"))
+                }
+            },
+            Expr::InitList(token, exprs) => {
+                if let Some(typ) = expected_type {
+                    if typ.kind != TypeKind::Structure {
+                        return Err(error!(token.loc(), "Cannot initialize {typ} with initializer list"));
+                    }
+                    match typ.struct_kind {
+                        StructKind::Array => {
+                            if typ.elements != exprs.len() {
+                                return Err(error!(token.loc(), "Type expected {} arguments for initializer list", (typ.elements)));
+                            }
+
+                            // Make the array
+                            let tag = self.ctx.alloc();
+                            let Some(ref inner) = typ.inner else { unreachable!() };
+                            let sz = typ.elements * inner.sizeof();
+                            if sz == 0 {
+                                return Err(error!(token.loc(), "Cannot make an array of size '0'!"));
+                            }
+
+                            // TODO: alignment
+                            genf!(self, "%.s{tag} =l alloc4 {sz}");
+                            genf!(self, "%.s{tag}.idx.0 =l copy %.s{tag}");
+                            for i in 1..typ.elements {
+                                let bytes = i * inner.sizeof();
+                                genf!(self, "%.s{tag}.idx.{i} =l add %.s{tag}, {bytes}");
+                            }
+                            
+                            // Get the expressions
+                            let mut vals = Vec::new();
+                            for expr in exprs {
+                                let val = self.emit_expr(comptime, expr, Some(*inner.clone()))?;
+                                vals.push(val);
+                            }
+
+                            // Type check the expressions and copy
+                            for (i, val) in vals.iter().enumerate() {
+                                if val.typ != **inner {
+                                    return Err(error!(token.loc(), "Expected {} for array member, got {} instead", (*inner), (val.typ)));
+                                }
+                                let qtype = val.typ.qbe_type();
+                                genf!(self, "store{qtype} {val}, %.s{tag}.idx.{i}");
+                            }
+                            Ok(StackValue{tag, typ})
+                        },
+                        _ => return Err(error!(token.loc(), "Cannot initialize {typ} with initializer list")),
+                    }
+                } else {
+                    Err(error!(token.loc(), "Cannot infer type of initializer list"))
                 }
             },
         }
