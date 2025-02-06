@@ -454,6 +454,16 @@ impl Generator {
         Ok(())
     }
     
+    fn tag_offset(&mut self, tag: usize, typ: &Type, offset: usize) -> usize {
+        let btag = self.ctx.alloc();
+        let ptr = self.ctx.alloc();
+        let bytes = offset * typ.sizeof();
+        
+        genf!(self, "%.s{btag} =l copy {bytes}");
+        genf!(self, "%.s{ptr} =l add %.s{tag}, %.s{btag}");
+        ptr
+    }
+    
     fn dbg_print_val(&mut self, comptime: &mut Compiletime, val: StackValue) -> Result<()> {
         if val.typ.is_ptr() {
             genf!(self, "%.void =w call $printf(l $fmt_ptr, ..., l %.s{})", val);
@@ -475,16 +485,10 @@ impl Generator {
                         StructKind::Array => {
                             let Some(ref inner) = val.typ.inner else { unreachable!() };
 
-                            // MAJOR TODO: get rid of suffix
                             genf!(self, "%.void =w call $printf(l $fmt_arr_start, ...)");
                             for i in 0..val.typ.elements {
-                                let tag = self.load_type(inner, val.tag, format!("%.s{val}.idx.{i}"));
-                                // let qtype = inner.qbe_type();
-                                // if inner.unsigned() {
-                                //     genf!(self, "%.s{tag} ={qtype} loadu{qtype} %.s{val}.idx.{i}");
-                                // } else {
-                                //     genf!(self, "%.s{tag} ={qtype} loads{qtype} %.s{val}.idx.{i}");
-                                // }
+                                let ptr = self.tag_offset(val.tag, inner, i);
+                                let tag = self.load_type(inner, val.tag, format!("%.s{ptr}"));
                                 self.dbg_print_val(comptime, StackValue{tag, typ: *val.typ.inner.clone().unwrap()});
                             }
                             genf!(self, "%.void =w call $printf(l $fmt_arr_end, ...)");
@@ -505,11 +509,11 @@ impl Generator {
                     let Some(ref inner) = typ.inner else { unreachable!() };
                     let tag = self.ctx.alloc();
                     genf!(self, "%.s{tag} ={qtype} copy {from_fmt}"); 
-                    genf!(self, "%.s{tag}.idx.0 =l copy %.s{tag}");
-                    for i in 1..typ.elements {
-                        let bytes = i * inner.sizeof();
-                        genf!(self, "%.s{tag}.idx.{i} =l add %.s{tag}, {bytes}");
-                    }
+                    // genf!(self, "%.s{tag}.idx.0 =l copy %.s{tag}");
+                    // for i in 1..typ.elements {
+                    //     let bytes = i * inner.sizeof();
+                    //     genf!(self, "%.s{tag}.idx.{i} =l add %.s{tag}, {bytes}");
+                    // }
                     tag
                 },
                 _ => todo!()
@@ -1056,11 +1060,11 @@ impl Generator {
 
                             // TODO: alignment
                             genf!(self, "%.s{tag} =l alloc4 {sz}");
-                            genf!(self, "%.s{tag}.idx.0 =l copy %.s{tag}");
-                            for i in 1..typ.elements {
-                                let bytes = i * inner.sizeof();
-                                genf!(self, "%.s{tag}.idx.{i} =l add %.s{tag}, {bytes}");
-                            }
+                            // genf!(self, "%.s{tag}.idx.0 =l copy %.s{tag}");
+                            // for i in 1..typ.elements {
+                            //     let bytes = i * inner.sizeof();
+                            //     genf!(self, "%.s{tag}.idx.{i} =l add %.s{tag}, {bytes}");
+                            // }
                             
                             // Get the expressions
                             let mut vals = Vec::new();
@@ -1076,7 +1080,8 @@ impl Generator {
                                 }
                                 let qtype = val.typ.qbe_type();
                                 // genf!(self, "store{qtype} %.s{val}, %.s{tag}.idx.{i}");
-                                self.store_type(&val.typ, val.tag, format!("%.s{tag}.idx.{i}"));
+                                let ptr = self.tag_offset(tag, inner, i);
+                                self.store_type(&val.typ, val.tag, format!("%.s{ptr}"));
                             }
                             Ok(StackValue{tag, typ})
                         },

@@ -25,3 +25,4 @@
 ../target/debug/main ./array1.eve && ./b.out
 ../target/debug/main ./array2.eve && ./b.out
 ../target/debug/main ./array3.eve && ./b.out
+../target/debug/main ./array4.eve && ./b.out
