@@ -32,6 +32,82 @@ impl Decorator {
     pub fn decorate(&mut self) {
         let addressed_vars = self.get_addressed_variables();
         self.decorated_mod.addressed_vars = addressed_vars;
+        self.return_check();
+    }
+
+    // rtc
+    pub fn return_check(&mut self) {
+        for global in self.decorated_mod.parse_module.globals.iter_mut() {
+            Self::rtc_global(global);
+        }
+    }
+
+    pub fn rtc_global(global: &mut Global) {
+        match global {
+            Global::Decl(_, ref mut expr) => {
+                Self::rtc_expr(expr);  
+            },
+            _ => (),
+        }
+    }
+
+    pub fn rtc_expr(expr: &mut Expr) -> () {
+        match expr {
+            Expr::Ident(_) => { () },
+            Expr::Path(_, _) => { () },
+            Expr::Number(_) => { () },
+            Expr::Bool(_) => { () },
+            Expr::BinOp(_, _, _) => { () },
+            Expr::UnOp(_, _) => { () },
+            Expr::Func(_, _, _, stmts, ref mut ret) => {
+                let mut returns = false;
+                for stmt in stmts {
+                    if Self::rtc_stmt(stmt) {
+                        returns = true;
+                    }
+                }
+                *ret = returns;
+            },
+            Expr::Call(_, _) => { () },
+            Expr::Null(_) => { () },
+            Expr::InitList(_, _) => { () },
+        }
+    }
+
+    pub fn rtc_stmt(stmt: &Stmt) -> bool {
+        match stmt {
+            Stmt::Dbg(_) => { false },
+            Stmt::Let(_, _, _) => { false },
+            Stmt::Scope(stmts) => {
+                let mut returns = false;
+                for stmt in stmts {
+                    if Self::rtc_stmt(stmt) {
+                        returns = true;
+                    }
+                }
+                returns
+            },
+            Stmt::Ex(_) => { false },
+            Stmt::If(_, box_stmt, opt) => {
+                // A condition is not enough, since it can be false
+                // Only in if-else where both branches are always reached do we check for returns
+                let mut returns = Self::rtc_stmt(box_stmt);
+                if let Some(box_else_block) = opt {
+                    if returns {
+                        returns = Self::rtc_stmt(box_else_block);
+                    }
+                } else {
+                    returns = false;
+                }
+                returns
+            },
+            Stmt::While(_, _) => { false },
+            Stmt::Break(_) => { false },
+            Stmt::Continue(_) => { false },
+            Stmt::Return(_, _) => {
+                true
+            },
+        }
     }
 
     // gav
@@ -67,7 +143,7 @@ impl Decorator {
                     }
                 }
             },
-            Expr::Func(_, _, stmts) => {
+            Expr::Func(_, _, _, stmts, _) => {
                 for stmt in stmts {
                     Self::gav_stmt(stmt, addrvars);
                 }

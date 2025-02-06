@@ -1,4 +1,4 @@
-:i count 31
+:i count 32
 :b shell 41
 ../target/debug/main ./dbg.eve && ./b.out
 :i returncode 0
@@ -416,4 +416,12 @@ Created executable b.out!
 
 :b stderr 90
 ./array7.eve:10:11: error: Inferring array sizes is not supported in function parameters!
+
+:b shell 50
+../target/debug/main ./return_check.eve && ./b.out
+:i returncode 1
+:b stdout 0
+
+:b stderr 91
+./return_check.eve:7:8: error: This function does not always return, but should return s32
 

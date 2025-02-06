@@ -349,9 +349,12 @@ impl Generator {
     pub fn emit_global(&mut self, comptime: &mut Compiletime, global: Global) -> Result<()> {
         match global {
             Global::Decl(name, expr) => {
-                let Expr::Func(params, ret_type, stmts) = expr else {
+                let Expr::Func(fn_, params, ret_type, stmts, returns) = expr else {
                     return Err(error!(name.loc(), "Only global functions are supported for now!"));
                 };
+                if !returns && ret_type.is_some() {
+                    return Err(error!(fn_.loc(), "This function does not always return, but should return {}", (ret_type.unwrap())));
+                }
                 let Token::Ident(_, text) = name.clone() else { unreachable!() };
                 // TODO IMPORTANT: was this necessary?
                 //self.func_map().insert(text.clone(), FunctionDecl::new(text));
@@ -1023,7 +1026,7 @@ impl Generator {
                     c => todo!("op `{c:?}`"),
                 }
             },
-            Expr::Func(params, ret_type, stmts) => {
+            Expr::Func(_, params, ret_type, stmts, _) => {
                 unreachable!("TBD: Should I put emit_function in here?")
             },
             Expr::Call(box_expr, mut args) => {

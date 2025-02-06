@@ -96,7 +96,7 @@ impl Parser {
                         return Err(error!(loc, "Missing function body"));
                     }
                     let stmts = self.parse_stmts()?;
-                    Expr::Func(params, return_type, stmts)
+                    Expr::Func(Token::Fn(loc), params, return_type, stmts, false)
                 },
                 Token::Eof => Err(error_orphan!("Could not parse expr term from end-of-file"))?,
                 t => Err(error!(t.loc(), "Could not parse expr term from {t:?}"))?,
