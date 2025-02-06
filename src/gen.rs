@@ -606,6 +606,22 @@ impl Generator {
             _ => tag,
         }
     }
+    
+    fn get_indexable_ptr(&mut self, val: &StackValue) -> usize {
+        if val.typ.is_ptr() {
+            return val.tag;
+        }
+        if !val.typ.is_struct() {
+            unreachable!("Must be a structure if not a pointer");
+        }
+        match val.typ.struct_kind {
+            StructKind::Array => val.tag,
+            StructKind::Slice => {
+                self.load_type(&TypeKind::U64.into(), val.tag, format!("%.s{val}"))
+            },
+            _ => unreachable!("unreachable unless if we support operator overloading"),
+        }
+    }
 
     pub fn emit_stmt(&mut self, comptime: &mut Compiletime, stmt: Stmt) -> Result<()> {
         match stmt {
@@ -871,13 +887,14 @@ impl Generator {
                                 let rval = self.emit_expr(comptime, *box_rhs2, None)?;
                                 lval.typ.assert_indexable(lloc)?;
                                 rval.typ.assert_number(rloc)?;
+                                let base = self.get_indexable_ptr(&lval);
 
                                 let rtag = self.extend_to_long(rval.tag, &rval.typ);                       
                                 let bytes = self.ctx.alloc();
                                 let ptr = self.ctx.alloc();
                                 let Some(ref inner) = lval.typ.inner else { unreachable!() };
                                 genf!(self, "%.s{bytes} =l mul %.s{rtag}, {}", (inner.sizeof()));
-                                genf!(self, "%.s{ptr} =l add %.s{lval}, %.s{bytes}");
+                                genf!(self, "%.s{ptr} =l add %.s{base}, %.s{bytes}");
 
                                 let val = self.emit_expr(comptime, *box_rhs, Some(*inner.clone()))?;
                                 self.store_type(&val.typ, val.tag, format!("%.s{ptr}"));
@@ -1018,6 +1035,7 @@ impl Generator {
                         let rval = self.emit_expr(comptime, *box_rhs, None)?;
                         lval.typ.assert_indexable(lloc)?;
                         rval.typ.assert_number(rloc)?;
+                        let base = self.get_indexable_ptr(&lval);
                         
                         // We need the index to be a 64 bit value
                         // TODO: maybe factor this out too?
@@ -1026,7 +1044,7 @@ impl Generator {
                         let ptr = self.ctx.alloc();
                         let Some(ref inner) = lval.typ.inner else { unreachable!() };
                         genf!(self, "%.s{bytes} =l mul %.s{rtag}, {}", (inner.sizeof()));
-                        genf!(self, "%.s{ptr} =l add %.s{lval}, %.s{bytes}");
+                        genf!(self, "%.s{ptr} =l add %.s{base}, %.s{bytes}");
                         let tag = self.load_type(inner, ptr, format!("%.s{ptr}"));
                         Ok(StackValue{tag, typ: *inner.clone()})
                     },

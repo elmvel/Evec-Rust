@@ -428,12 +428,14 @@ Created executable b.out!
 :b shell 45
 ../target/debug/main ./slices1.eve && ./b.out
 :i returncode 0
-:b stdout 47
+:b stdout 38
 Created executable b.out!
-{
-0x7ffea4f14c70
+1
+2
 3
-}
+1
+2
+3
 
 :b stderr 0
 

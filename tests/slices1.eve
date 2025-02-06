@@ -3,5 +3,14 @@ module hello;
 main :: fn() {
     let xs: [_]u32 = {1, 2, 3};
     let slc: []u32 = xs[..];
-    dbg slc;
+    dbg slc[0];
+    dbg slc[1];
+    dbg slc[2];
+    bar(slc);
+}
+
+bar :: fn(x: []u32) {
+    dbg x[0];
+    dbg x[1];
+    dbg x[2];
 }
