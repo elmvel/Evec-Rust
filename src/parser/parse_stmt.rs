@@ -63,6 +63,12 @@ impl Parser {
         if self.lexer.eat(Token::Op(ldef!(), '*')) {
             Ok(self.parse_type()?.ptr())
         } else if self.lexer.eat(Token::Op(ldef!(), '[')) {
+            // Slice
+            if self.lexer.eat(Token::Op(ldef!(), ']')) {
+                let inner = self.parse_type()?;
+                return Ok(Type::wrap(inner, StructKind::Slice, None, false));
+            }
+            // Array
             let size = self.parse_expr()?;
             match size {
                 Expr::Ident(ref token) => {

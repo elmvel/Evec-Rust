@@ -61,6 +61,7 @@ impl Parser {
                 Token::Int(_, _) => Expr::Number(token),
                 Token::True(_) | Token::False(_) => Expr::Bool(token),
                 Token::Null(loc) => Expr::Null(Token::Null(loc)),
+                Token::WideOp(loc, ('.', '.')) => Expr::Range(Token::WideOp(loc, ('.', '.')), None, None),
                 Token::Op(_, '(') => {
                     let lhs = self.parse_expr_bp(0);
                     self.expect(Token::Op(ldef!(), ')'))?;

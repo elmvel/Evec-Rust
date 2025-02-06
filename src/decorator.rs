@@ -71,6 +71,7 @@ impl Decorator {
             Expr::Call(_, _) => { () },
             Expr::Null(_) => { () },
             Expr::InitList(_, _) => { () },
+            Expr::Range(_, _, _) => { () },
         }
     }
 
@@ -159,6 +160,7 @@ impl Decorator {
                     Self::gav_expr(expr, addrvars);
                 }
             },
+            Expr::Range(_, _, _) => { /* Even though we have expressions here, they cannot be pointers */ () },
         }
     }
 

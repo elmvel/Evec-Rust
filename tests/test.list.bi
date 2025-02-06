@@ -1,4 +1,4 @@
-:i count 32
+:i count 33
 :b shell 41
 ../target/debug/main ./dbg.eve && ./b.out
 :i returncode 0
@@ -424,4 +424,16 @@ Created executable b.out!
 
 :b stderr 91
 ./return_check.eve:7:8: error: This function does not always return, but should return s32
+
+:b shell 45
+../target/debug/main ./slices1.eve && ./b.out
+:i returncode 0
+:b stdout 47
+Created executable b.out!
+{
+0x7ffea4f14c70
+3
+}
+
+:b stderr 0
 

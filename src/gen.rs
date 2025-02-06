@@ -326,6 +326,11 @@ impl Generator {
         
     }
 
+    fn emit_types(&mut self, comptime: &mut Compiletime) -> Result<()> {
+        genf!(self, "type :slice = {{ l, l }}");
+        Ok(())
+    }
+
     pub fn emit(&mut self, comptime: &mut Compiletime) -> Result<()> {
         // TODO: set the name field of the gen module
         self.writeln("# QBE Start");
@@ -335,9 +340,9 @@ impl Generator {
         genf!(self, "data $fmt_ptr = {{ b \"%p\\n\", b 0 }}");
         genf!(self, "data $fmt_arr_start = {{ b \"{{\\n\", b 0 }}");
         genf!(self, "data $fmt_arr_end = {{ b \"}}\\n\", b 0 }}");
-        // for global in self.decorated_mod.globals.drain(..) {
-        //     self.emit_global(global)?;
-        // }
+
+        self.emit_types(comptime)?;
+        
         self.decorated_mod.parse_module.globals.reverse();
         while !self.decorated_mod.parse_module.globals.is_empty() {
             let global = self.decorated_mod.parse_module.globals.pop().unwrap();
@@ -497,6 +502,18 @@ impl Generator {
                                 let tag = self.load_type(inner, val.tag, format!("%.s{ptr}"));
                                 self.dbg_print_val(comptime, StackValue{tag, typ: *val.typ.inner.clone().unwrap()});
                             }
+                            genf!(self, "%.void =w call $printf(l $fmt_arr_end, ...)");
+                        },
+                        StructKind::Slice => {
+                            let sz_offset = self.ctx.alloc();
+                            let sz_ptr = self.ctx.alloc();
+                            genf!(self, "%.s{sz_offset} =l copy 8"); // offset(slice.size)
+                            genf!(self, "%.s{sz_ptr} =l add %.s{val}, %.s{sz_offset}"); // &slice.size
+                            let sz = self.load_type(&TypeKind::U64.into(), sz_ptr, format!("%.s{sz_ptr}")); // slice.size
+
+                            genf!(self, "%.void =w call $printf(l $fmt_arr_start, ...)");
+                            genf!(self, "%.void =w call $printf(l $fmt_ptr, ..., l %.s{})", val);
+                            genf!(self, "%.void =w call $printf(l $fmt_ll, ..., l %.s{})", sz);
                             genf!(self, "%.void =w call $printf(l $fmt_arr_end, ...)");
                         },
                         _ => todo!("generic printing of structures")
@@ -954,6 +971,46 @@ impl Generator {
                         Ok(StackValue{ tag, typ: TypeKind::Bool.into() })
                     },
                     Op::Arr => {
+                        // Slice
+                        if let Expr::Range(ref t, ref lower, ref upper) = *box_rhs {
+                            // TODO: always assumes we are slicing an array, might not always be true
+                            let lloc = box_lhs.loc();
+                            let rloc = box_rhs.loc();
+                            
+                            let lval = self.emit_expr(comptime, *box_lhs, None)?;
+                            lval.typ.assert_indexable(lloc)?;
+
+                            return match (lower, upper) {
+                                (Some(bl), Some(bu)) => {
+                                    todo!()
+                                },
+                                (Some(bl), None) => {
+                                    todo!()
+                                },
+                                (None, Some(bu)) => {
+                                    todo!()
+                                },
+                                (None, None) => {
+                                    // Make the slice
+                                    let tag = self.ctx.alloc();
+                                    let sz_offset = self.ctx.alloc();
+                                    let sz_ptr = self.ctx.alloc();
+                                    genf!(self, "%.s{tag} =l alloc8 16");
+                                    genf!(self, "%.s{sz_offset} =l copy 8"); // offset(slice.size)
+                                    genf!(self, "%.s{sz_ptr} =l add %.s{tag}, %.s{sz_offset}"); // &slice.size
+
+                                    // Store the range (no offsetting the ptr or anything here)
+                                    let Some(ref inner) = lval.typ.inner else { unreachable!() };
+                                    genf!(self, "storel %.s{lval}, %.s{tag}"); // Assumes array
+                                    let count = self.ctx.alloc();
+                                    genf!(self, "%.s{count} =l copy {}", (lval.typ.elements));
+                                    genf!(self, "storel %.s{count}, %.s{sz_ptr}"); // Assumes array
+                                    Ok(StackValue{tag, typ: Type::wrap(*inner.clone(), StructKind::Slice, None, false)})
+                                },
+                            }
+                        }
+
+                        // Array
                         let lloc = box_lhs.loc();
                         let rloc = box_rhs.loc();
                         
@@ -1126,6 +1183,9 @@ impl Generator {
                 } else {
                     Err(error!(token.loc(), "Cannot infer type of initializer list"))
                 }
+            },
+            Expr::Range(token, upper, lower) => {
+                todo!("probably unreachable!");
             },
         }
     }

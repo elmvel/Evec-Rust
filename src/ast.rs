@@ -24,6 +24,7 @@ pub enum Op {
     EqEq,
     NotEq,
     And,
+    Range,
 }
 
 impl Op {
@@ -68,6 +69,7 @@ impl TryInto<Op> for (char, char) {
             ('<', '=') => Ok(Op::Le),
             ('=', '=') => Ok(Op::EqEq),
             ('!', '=') => Ok(Op::NotEq),
+            ('.', '.') => Ok(Op::Range),
             c => Err(error_orphan!("Could not convert to op: {c:?}")),
         }
     }
@@ -108,6 +110,7 @@ pub enum Expr {
     Call(Box<Expr>, Vec<Expr>), // TODO: add parameters
     Null(Token),
     InitList(Token, Vec<Expr>), // First token is just for easy location
+    Range(Token, Option<Box<Expr>>, Option<Box<Expr>>),
 }
 
 impl Expr {
@@ -123,6 +126,7 @@ impl Expr {
             Expr::Call(t, _) => t.loc(),
             Expr::Null(t) => t.loc(),
             Expr::InitList(t, _) => t.loc(),
+            Expr::Range(t, _, _) => t.loc(),
         }
     }
 }
@@ -171,6 +175,7 @@ pub enum TypeKind {
 #[repr(u8)]
 pub enum StructKind {
     Array,
+    Slice,
     CountStructs,
 }
 
@@ -231,6 +236,9 @@ impl Type {
                     StructKind::Array => {
                         "l"
                     },
+                    StructKind::Slice => {
+                        "l"
+                    },
                     _ => todo!("Should be able to determine the structure qbe type based on the struct id"),
                 }
             },
@@ -253,6 +261,9 @@ impl Type {
                     StructKind::Array => {
                         let Some(ref inner) = self.inner else { unreachable!() };
                         self.elements * inner.sizeof()
+                    },
+                    StructKind::Slice => {
+                        16
                     },
                     _ => todo!("need to lookup in some strucure table"),
                 }
@@ -287,7 +298,7 @@ impl Type {
         }
         if self.is_struct() {
             match self.struct_kind {
-                StructKind::Array => { Ok(()) },
+                StructKind::Array | StructKind::Slice => { Ok(()) },
                 _ => todo!("Probably allow slices too, but nothing else (maybe strings)"),
             }
         } else {
@@ -337,6 +348,10 @@ impl fmt::Display for Type {
                         let Some(ref inner) = self.inner else { unreachable!("idk how to error out here") };
                         write!(f, "[{}]{}", self.elements, *inner)
                     }, 
+                    StructKind::Slice => {
+                        let Some(ref inner) = self.inner else { unreachable!("idk how to error out here") };
+                        write!(f, "[]{}", *inner)
+                    },
                     _ => todo!("Another structure table call"),
                 }
             },
