@@ -107,6 +107,7 @@ pub enum Expr {
     Func(Vec<Param>, Option<Type>, Vec<Stmt>), // Eventually Func(Token, Vec<Param>, RetType, Vec<Stmt>)
     Call(Box<Expr>, Vec<Expr>), // TODO: add parameters
     Null(Token),
+    InitList(Token, Vec<Expr>), // First token is just for easy location
 }
 
 impl Expr {
@@ -121,6 +122,7 @@ impl Expr {
             Expr::Func(_, _, _) => todo!(),
             Expr::Call(t, _) => t.loc(),
             Expr::Null(t) => t.loc(),
+            Expr::InitList(t, _) => t.loc(),
         }
     }
 }
@@ -128,7 +130,12 @@ impl Expr {
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Type {
     pub kind: TypeKind,
-    pub indirection: u16, // How many pointers do we have
+    pub indirection: u8, // How many pointers do we have
+    pub struct_kind: StructKind,
+    // pub inner_type: u64, // We don't need this to exist now, but it should point to the typekind of the inner field?
+    pub elements: usize, // Compile time only
+    pub infer_elements: bool,
+    pub inner: Option<Box<Type>>,
 }
 
 impl Into<Type> for TypeKind {
@@ -136,12 +143,16 @@ impl Into<Type> for TypeKind {
         Type {
             kind: self,
             indirection: 0,
+            struct_kind: StructKind::CountStructs,
+            elements: 0,
+            infer_elements: false,
+            inner: None,
         }
     }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-#[repr(u16)]
+#[repr(u8)]
 pub enum TypeKind {
     Void,
     U64,
@@ -153,9 +164,32 @@ pub enum TypeKind {
     S16,
     S8,
     Bool,
+    Structure,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[repr(u8)]
+pub enum StructKind {
+    Array,
+    CountStructs,
 }
 
 impl Type {
+    pub fn wrap(typ: Type, struct_kind: StructKind, elements: Option<usize>, infer_elements: bool) -> Self {
+        Self {
+            kind: TypeKind::Structure,
+            indirection: 0,
+            struct_kind: struct_kind,
+            elements: elements.unwrap_or(0),
+            infer_elements,
+            inner: Some(Box::new(typ)),
+        }
+    }
+
+    pub fn is_struct(&self) -> bool {
+        self.kind == TypeKind::Structure
+    }
+
     pub fn is_ptr(&self) -> bool {
         self.indirection > 0
     }
@@ -164,6 +198,10 @@ impl Type {
         Self {
             kind: self.kind.clone(),
             indirection: self.indirection + 1,
+            struct_kind: self.struct_kind.clone(),
+            elements: self.elements,
+            infer_elements: self.infer_elements,
+            inner: self.inner.clone(),
         }
     }
 
@@ -171,6 +209,10 @@ impl Type {
         Self {
             kind: self.kind.clone(),
             indirection: self.indirection.checked_sub(1).unwrap_or(0),
+            struct_kind: self.struct_kind.clone(),
+            elements: self.elements,
+            infer_elements: self.infer_elements,
+            inner: self.inner.clone(),
         }
     }
     
@@ -184,6 +226,14 @@ impl Type {
             TypeKind::S64 => "l",
             TypeKind::S32 | TypeKind::S16 | TypeKind::S8 => "w",
             TypeKind::Void | TypeKind::Bool => "w",
+            TypeKind::Structure => {
+                match self.struct_kind {
+                    StructKind::Array => {
+                        "l"
+                    },
+                    _ => todo!("Should be able to determine the structure qbe type based on the struct id"),
+                }
+            },
         }
     }
 
@@ -198,6 +248,15 @@ impl Type {
             TypeKind::U8  | TypeKind::S8 => 1,
             TypeKind::Bool => 4,
             TypeKind::Void => 0,
+            TypeKind::Structure => {
+                match self.struct_kind {
+                    StructKind::Array => {
+                        let Some(ref inner) = self.inner else { unreachable!() };
+                        self.elements * inner.sizeof()
+                    },
+                    _ => todo!("need to lookup in some strucure table"),
+                }
+            },
         }
     }
 
@@ -222,11 +281,37 @@ impl Type {
         }
     }
 
+    pub fn assert_indexable(&self, loc: Location) -> Result<()> {
+        if self.is_ptr() {
+            return Ok(());
+        }
+        if self.is_struct() {
+            match self.struct_kind {
+                StructKind::Array => { Ok(()) },
+                _ => todo!("Probably allow slices too, but nothing else (maybe strings)"),
+            }
+        } else {
+            Err(error!(loc, "Cannot index type {self}"))
+        }
+    }
+
     pub fn unsigned(&self) -> bool {
         match self.kind {
             TypeKind::U64 | TypeKind::U32 | TypeKind::U16 | TypeKind::U8 => true,
             _ => false,
         }
+    }
+
+    pub fn soft_equals(&mut self, rhs: &mut Type) -> bool {
+        if self.infer_elements && !rhs.infer_elements {
+            self.elements = rhs.elements;
+            self.infer_elements = false;
+        }
+        if !self.infer_elements && rhs.infer_elements {
+            rhs.elements = self.elements;
+            rhs.infer_elements = false;
+        }
+        self == rhs
     }
 }
 
@@ -246,6 +331,15 @@ impl fmt::Display for Type {
             TypeKind::S16 => write!(f, "s16"),
             TypeKind::S8 => write!(f, "s8"),
             TypeKind::Bool => write!(f, "bool"),
+            TypeKind::Structure => {
+                match self.struct_kind {
+                    StructKind::Array => {
+                        let Some(ref inner) = self.inner else { unreachable!("idk how to error out here") };
+                        write!(f, "[{}]{}", self.elements, *inner)
+                    }, 
+                    _ => todo!("Another structure table call"),
+                }
+            },
         }
     }
 }

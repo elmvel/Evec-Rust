@@ -1,0 +1,12 @@
+module hello;
+
+main :: fn() {
+    // NOTE: constants not allowed
+    let n = 3;
+    let arr: [3]u32 = {1, 2, 3};
+    let i = 0;
+    while i < n {
+        dbg arr[i];
+        i = i + 1;
+    }
+}

@@ -1,0 +1,12 @@
+module hello;
+
+main :: fn() {
+    // let arr: [3]u32 = {1, 2, 3};
+    // dbg arr;
+    // Interesting
+    // Clean up suffix crap and we can probably commit this for now
+    let arr2: [1][3]u32 = {{1, 2, 3}};
+    dbg arr2;
+    let arr3: [3][2]u32 = {{6, 9}, {4, 2}, {9, 9}};
+    dbg arr3;
+}

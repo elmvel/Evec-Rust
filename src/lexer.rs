@@ -81,6 +81,15 @@ impl Token {
             Token::Eof => panic!("Didn't handle Eof in previous match case"),
         }
     }
+
+    pub fn is_sink_ident(&self) -> bool {
+        match self {
+            Token::Ident(_, text) => {
+                text == "_"
+            },
+            _ => false,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Default, Hash)]

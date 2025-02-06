@@ -78,6 +78,11 @@ impl Decorator {
                 }
             },
             Expr::Null(_) => { () },
+            Expr::InitList(_, exprs) => {
+                for expr in exprs {
+                    Self::gav_expr(expr, addrvars);
+                }
+            },
         }
     }
 

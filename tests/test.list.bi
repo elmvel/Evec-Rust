@@ -1,4 +1,4 @@
-:i count 24
+:i count 31
 :b shell 41
 ../target/debug/main ./dbg.eve && ./b.out
 :i returncode 0
@@ -276,4 +276,144 @@ Created executable b.out!
 420
 
 :b stderr 0
+
+:b shell 44
+../target/debug/main ./array1.eve && ./b.out
+:i returncode 0
+:b stdout 68
+Created executable b.out!
+{
+{
+1
+2
+3
+}
+}
+{
+{
+6
+9
+}
+{
+4
+2
+}
+{
+9
+9
+}
+}
+
+:b stderr 0
+
+:b shell 44
+../target/debug/main ./array2.eve && ./b.out
+:i returncode 0
+:b stdout 102
+Created executable b.out!
+{
+1
+2
+3
+}
+{
+{
+1
+2
+3
+}
+}
+{
+{
+6
+9
+}
+{
+4
+2
+}
+{
+9
+9
+}
+}
+{
+{
+1
+2
+3
+}
+}
+101010101
+
+:b stderr 0
+
+:b shell 44
+../target/debug/main ./array3.eve && ./b.out
+:i returncode 0
+:b stdout 32
+Created executable b.out!
+1
+2
+3
+
+:b stderr 0
+
+:b shell 44
+../target/debug/main ./array4.eve && ./b.out
+:i returncode 0
+:b stdout 38
+Created executable b.out!
+{
+4
+6
+9
+4
+}
+
+:b stderr 0
+
+:b shell 44
+../target/debug/main ./array5.eve && ./b.out
+:i returncode 0
+:b stdout 50
+Created executable b.out!
+{
+1
+2
+3
+}
+{
+69
+1337
+3
+}
+
+:b stderr 0
+
+:b shell 44
+../target/debug/main ./array6.eve && ./b.out
+:i returncode 0
+:b stdout 58
+Created executable b.out!
+{
+69
+420
+1337
+}
+{
+69
+420
+1337
+}
+
+:b stderr 0
+
+:b shell 44
+../target/debug/main ./array7.eve && ./b.out
+:i returncode 1
+:b stdout 0
+
+:b stderr 90
+./array7.eve:10:11: error: Inferring array sizes is not supported in function parameters!
 

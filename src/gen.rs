@@ -226,6 +226,9 @@ macro_rules! gen_funcall_from_funcdef {
 
             // Type check arguments
             for i in 0..stack_values.len() {
+                if def.params.get(i).unwrap().1.infer_elements {
+                    return Err(error!(def.params[i].0.loc(), "Inferring array sizes is not supported in function parameters!"));
+                }
                 if stack_values[i].typ != def.params.get(i).unwrap().1 {
                     return Err(error!(def.params[i].0.loc(), "Parameter expected type {}, but got {} instead.", (def.params[i].1), (stack_values[i].typ)));
                 }
@@ -330,6 +333,8 @@ impl Generator {
         genf!(self, "data $fmt_ll = {{ b \"%lld\\n\", b 0 }}");
         genf!(self, "data $fmt_bool = {{ b \"bool: %d\\n\", b 0 }}");
         genf!(self, "data $fmt_ptr = {{ b \"%p\\n\", b 0 }}");
+        genf!(self, "data $fmt_arr_start = {{ b \"{{\\n\", b 0 }}");
+        genf!(self, "data $fmt_arr_end = {{ b \"}}\\n\", b 0 }}");
         // for global in self.decorated_mod.globals.drain(..) {
         //     self.emit_global(global)?;
         // }
@@ -451,29 +456,142 @@ impl Generator {
         self.pop_frame();
         Ok(())
     }
+    
+    fn tag_offset(&mut self, tag: usize, typ: &Type, offset: usize) -> usize {
+        let btag = self.ctx.alloc();
+        let ptr = self.ctx.alloc();
+        let bytes = offset * typ.sizeof();
+        
+        genf!(self, "%.s{btag} =l copy {bytes}");
+        genf!(self, "%.s{ptr} =l add %.s{tag}, %.s{btag}");
+        ptr
+    }
+    
+    fn dbg_print_val(&mut self, comptime: &mut Compiletime, val: StackValue) -> Result<()> {
+        if val.typ.is_ptr() {
+            genf!(self, "%.void =w call $printf(l $fmt_ptr, ..., l %.s{})", val);
+        } else {
+            match val.typ.kind {
+                TypeKind::U64 | TypeKind::S64 => {
+                    genf!(self, "%.void =w call $printf(l $fmt_ll, ..., l %.s{})", val);
+                },
+                TypeKind::U32 | TypeKind::U16 | TypeKind::U8 |
+                TypeKind::S32 | TypeKind::S16 | TypeKind::S8 => {
+                    genf!(self, "%.void =w call $printf(l $fmt_d, ..., w %.s{})", val);
+                },
+                TypeKind::Bool => {
+                    genf!(self, "%.void =w call $printf(l $fmt_bool, ..., w %.s{})", val);
+                },
+                TypeKind::Void => unreachable!(),
+                TypeKind::Structure => {
+                    match val.typ.struct_kind {
+                        StructKind::Array => {
+                            let Some(ref inner) = val.typ.inner else { unreachable!() };
+
+                            genf!(self, "%.void =w call $printf(l $fmt_arr_start, ...)");
+                            for i in 0..val.typ.elements {
+                                let ptr = self.tag_offset(val.tag, inner, i);
+                                let tag = self.load_type(inner, val.tag, format!("%.s{ptr}"));
+                                self.dbg_print_val(comptime, StackValue{tag, typ: *val.typ.inner.clone().unwrap()});
+                            }
+                            genf!(self, "%.void =w call $printf(l $fmt_arr_end, ...)");
+                        },
+                        _ => todo!("generic printing of structures")
+                    }
+                },
+            }
+        }
+        Ok(())
+    }
+
+    fn load_type(&mut self, typ: &Type, from_tag: usize, from_fmt: String) -> usize {
+        let qtype = typ.qbe_type();
+        if typ.is_struct() {
+            match typ.struct_kind {
+                StructKind::Array => {
+                    let Some(ref inner) = typ.inner else { unreachable!() };
+                    let tag = self.ctx.alloc();
+                    genf!(self, "%.s{tag} ={qtype} copy {from_fmt}"); 
+                    // genf!(self, "%.s{tag}.idx.0 =l copy %.s{tag}");
+                    // for i in 1..typ.elements {
+                    //     let bytes = i * inner.sizeof();
+                    //     genf!(self, "%.s{tag}.idx.{i} =l add %.s{tag}, {bytes}");
+                    // }
+                    tag
+                },
+                _ => todo!()
+            }
+        } else {
+            let tag = self.ctx.alloc();
+            // TODO: no floating point is checked here
+            if typ.sizeof() == 8 {
+                genf!(self, "%.s{tag} ={qtype} load{qtype} {from_fmt}");
+            } else {
+                if typ.unsigned() {
+                    genf!(self, "%.s{tag} ={qtype} loadu{qtype} {from_fmt}");
+                } else {
+                    genf!(self, "%.s{tag} ={qtype} loads{qtype} {from_fmt}");
+                }
+            }
+            return tag;
+        }
+    }
+
+    fn store_type(&mut self, typ: &Type, from_tag: usize, to_fmt: String) {
+        if typ.is_struct() {
+            match typ.struct_kind {
+                StructKind::Array => {
+                    let Some(ref inner) = typ.inner else { unreachable!() };
+                    //let tag = self.ctx.alloc();
+                    let bytes = typ.elements * inner.sizeof();
+                    genf!(self, "blit %.s{from_tag}, {to_fmt}, {bytes}");
+                },
+                _ => todo!()
+            }
+        } else {
+            let qtype = typ.qbe_type();
+            genf!(self, "store{qtype} %.s{from_tag}, {to_fmt}");
+        }
+    }
+
+    fn extend_to_long(&mut self, tag: usize, typ: &Type) -> usize {
+        match typ.sizeof() {
+            1 => {
+                let t = self.ctx.alloc();
+                if typ.unsigned() {
+                    genf!(self, "%.s{t} =l extub %.s{tag}");
+                } else {
+                    genf!(self, "%.s{t} =l extsb %.s{tag}");
+                }
+                t
+            },
+            2 => {
+                let t = self.ctx.alloc();
+                if typ.unsigned() {
+                    genf!(self, "%.s{t} =l extuh %.s{tag}");
+                } else {
+                    genf!(self, "%.s{t} =l extsh %.s{tag}");
+                }
+                t
+            },
+            4 => {
+                let t = self.ctx.alloc();
+                if typ.unsigned() {
+                    genf!(self, "%.s{t} =l extuw %.s{tag}");
+                } else {
+                    genf!(self, "%.s{t} =l extsw %.s{tag}");
+                }
+                t
+            },
+            _ => tag,
+        }
+    }
 
     pub fn emit_stmt(&mut self, comptime: &mut Compiletime, stmt: Stmt) -> Result<()> {
         match stmt {
             Stmt::Dbg(expr) => {
                 let val = self.emit_expr(comptime, expr, None)?;
-
-                if val.typ.is_ptr() {
-                    genf!(self, "%.void =w call $printf(l $fmt_ptr, ..., l %.s{})", val);
-                } else {
-                    match val.typ.kind {
-                        TypeKind::U64 | TypeKind::S64 => {
-                            genf!(self, "%.void =w call $printf(l $fmt_ll, ..., l %.s{})", val);
-                        },
-                        TypeKind::U32 | TypeKind::U16 | TypeKind::U8 |
-                        TypeKind::S32 | TypeKind::S16 | TypeKind::S8 => {
-                            genf!(self, "%.void =w call $printf(l $fmt_d, ..., w %.s{})", val);
-                        },
-                        TypeKind::Bool => {
-                            genf!(self, "%.void =w call $printf(l $fmt_bool, ..., w %.s{})", val);
-                        },
-                        TypeKind::Void => unreachable!(),
-                    }
-                }
+                self.dbg_print_val(comptime, val);
                 Ok(())
             },
             Stmt::Let(name, typ, expr) => {
@@ -487,18 +605,19 @@ impl Generator {
                 
                 let expr = self.emit_expr(comptime, expr, typ.clone())?;
 
-                let val = if allocate {
+                let mut val = if allocate {
                     let tag = self.ctx.alloc();
                     // TODO: alignment
                     genf!(self, "%.s{tag} =l alloc4 {}", (expr.typ.sizeof()));
-                    genf!(self, "store{} %.s{}, %.s{tag}", (expr.typ.qbe_type()), (expr.tag));
+                    self.store_type(&expr.typ, expr.tag, format!("%.s{tag}"));
+                    //genf!(self, "store{} %.s{}, %.s{tag}", (expr.typ.qbe_type()), (expr.tag));
                     StackValue{tag, typ: expr.typ}
                 } else {
                     expr
                 };
                 
-                if let Some(expected_type) = typ {
-                    if val.typ != expected_type {
+                if let Some(mut expected_type) = typ {
+                    if !val.typ.soft_equals(&mut expected_type) {
                         return Err(error!(loc, "Expected type {expected_type}, but got {} instead", (val.typ)));
                     }
                 }
@@ -610,15 +729,15 @@ impl Generator {
 
                 let val = self.ctx.lookup(&text, loc)?;
                 if allocated {
-                    let tag = self.ctx.alloc();
                     let deref = val.typ.deref();
-                    let qtype = deref.qbe_type();
-                    // TODO: won't be compatible with large data
-                    if val.typ.unsigned() {
-                        genf!(self, "%.s{tag} ={qtype} loadu{qtype} %.s{}", (val.tag));
-                    } else {
-                        genf!(self, "%.s{tag} ={qtype} loads{qtype} %.s{}", (val.tag));
-                    }
+                    // let qtype = deref.qbe_type();
+                    // // TODO: won't be compatible with large data
+                    // if val.typ.unsigned() {
+                    //     genf!(self, "%.s{tag} ={qtype} loadu{qtype} %.s{}", (val.tag));
+                    // } else {
+                    //     genf!(self, "%.s{tag} ={qtype} loads{qtype} %.s{}", (val.tag));
+                    // }
+                    let tag = self.load_type(&deref, val.tag, format!("%.s{val}"));
                     Ok(StackValue{tag, typ: val.typ})
                 } else {
                     Ok(val)
@@ -691,6 +810,7 @@ impl Generator {
                     Op::Eq => {
                         match *box_lhs {
                             Expr::Ident(Token::Ident(loc, text)) => {
+                                // EQ => Assigning to a variable
                                 let val = self.ctx.lookup(&text, loc.clone())?;
 
                                 let new = self.emit_expr(comptime, *box_rhs, Some(val.typ.clone()))?;
@@ -704,6 +824,7 @@ impl Generator {
                                 Ok(new)
                             },
                             Expr::UnOp(Op::Mul, box_expr) => {
+                                // EQ => Assigning to a dereferenced variable
                                 let loc = box_expr.loc();
                                 let ptr = self.emit_expr(comptime, *box_expr, None)?;
                                 
@@ -717,8 +838,30 @@ impl Generator {
                                 let qtype = deref.qbe_type();
                                 // TODO: won't be compatible with large data
 
-                                genf!(self, "store{qtype} %.s{}, %.s{}", (new.tag), (ptr.tag));
+                                // genf!(self, "store{qtype} %.s{}, %.s{}", (new.tag), (ptr.tag));
+                                self.store_type(&deref, new.tag, format!("%.s{ptr}"));
                                 Ok(new)
+                            },
+                            Expr::BinOp(Op::Arr, box_lhs2, box_rhs2) => {
+                                // EQ => Assigning to an indexed variable
+                                let lloc = box_lhs2.loc();
+                                let rloc = box_rhs2.loc();
+                                
+                                let lval = self.emit_expr(comptime, *box_lhs2, None)?;
+                                let rval = self.emit_expr(comptime, *box_rhs2, None)?;
+                                lval.typ.assert_indexable(lloc)?;
+                                rval.typ.assert_number(rloc)?;
+
+                                let rtag = self.extend_to_long(rval.tag, &rval.typ);                       
+                                let bytes = self.ctx.alloc();
+                                let ptr = self.ctx.alloc();
+                                let Some(ref inner) = lval.typ.inner else { unreachable!() };
+                                genf!(self, "%.s{bytes} =l mul %.s{rtag}, {}", (inner.sizeof()));
+                                genf!(self, "%.s{ptr} =l add %.s{lval}, %.s{bytes}");
+
+                                let val = self.emit_expr(comptime, *box_rhs, Some(*inner.clone()))?;
+                                self.store_type(&val.typ, val.tag, format!("%.s{ptr}"));
+                                Ok(val)
                             },
                             e => return Err(error!(e.loc(), "Expected variable or deref assignment")),
                         }
@@ -807,6 +950,26 @@ impl Generator {
                         }
                         Ok(StackValue{ tag, typ: TypeKind::Bool.into() })
                     },
+                    Op::Arr => {
+                        let lloc = box_lhs.loc();
+                        let rloc = box_rhs.loc();
+                        
+                        let lval = self.emit_expr(comptime, *box_lhs, None)?;
+                        let rval = self.emit_expr(comptime, *box_rhs, None)?;
+                        lval.typ.assert_indexable(lloc)?;
+                        rval.typ.assert_number(rloc)?;
+                        
+                        // We need the index to be a 64 bit value
+                        // TODO: maybe factor this out too?
+                        let rtag = self.extend_to_long(rval.tag, &rval.typ);                       
+                        let bytes = self.ctx.alloc();
+                        let ptr = self.ctx.alloc();
+                        let Some(ref inner) = lval.typ.inner else { unreachable!() };
+                        genf!(self, "%.s{bytes} =l mul %.s{rtag}, {}", (inner.sizeof()));
+                        genf!(self, "%.s{ptr} =l add %.s{lval}, %.s{bytes}");
+                        let tag = self.load_type(inner, ptr, format!("%.s{ptr}"));
+                        Ok(StackValue{tag, typ: *inner.clone()})
+                    },
                     _ => todo!()
                 }
             },
@@ -846,16 +1009,15 @@ impl Generator {
                             return Err(error!(loc, "Cannot dereference a non-pointer type {}", (ptr.typ)));
                         }
                         
-                        let tag = self.ctx.alloc();
-                        
                         let deref = ptr.typ.deref();
-                        let qtype = deref.qbe_type();
-                        // TODO: won't be compatible with large data
-                        if deref.unsigned() {
-                            genf!(self, "%.s{tag} ={qtype} loadu{qtype} %.s{}", (ptr.tag));
-                        } else {
-                            genf!(self, "%.s{tag} ={qtype} loads{qtype} %.s{}", (ptr.tag));
-                        }
+                        // let qtype = deref.qbe_type();
+                        // // TODO: won't be compatible with large data
+                        // if deref.unsigned() {
+                        //     genf!(self, "%.s{tag} ={qtype} loadu{qtype} %.s{}", (ptr.tag));
+                        // } else {
+                        //     genf!(self, "%.s{tag} ={qtype} loads{qtype} %.s{}", (ptr.tag));
+                        // }
+                        let tag = self.load_type(&deref, ptr.tag, format!("%.s{ptr}"));
                         Ok(StackValue{tag: tag, typ: deref})
                     },
                     c => todo!("op `{c:?}`"),
@@ -904,6 +1066,62 @@ impl Generator {
                     Ok(StackValue{tag, typ})
                 } else {
                     Err(error!(token.loc(), "Cannot infer type of null pointer"))
+                }
+            },
+            Expr::InitList(token, exprs) => {
+                if let Some(mut typ) = expected_type {
+                    if typ.kind != TypeKind::Structure {
+                        return Err(error!(token.loc(), "Cannot initialize {typ} with initializer list"));
+                    }
+                    match typ.struct_kind {
+                        StructKind::Array => {
+                            if typ.infer_elements {
+                                typ.elements = exprs.len();
+                                typ.infer_elements = false;
+                            }
+                            if typ.elements != exprs.len() {
+                                return Err(error!(token.loc(), "Type expected {} arguments for initializer list", (typ.elements)));
+                            }
+
+                            // Make the array
+                            let tag = self.ctx.alloc();
+                            let Some(ref inner) = typ.inner else { unreachable!() };
+                            let sz = typ.elements * inner.sizeof();
+                            if sz == 0 {
+                                return Err(error!(token.loc(), "Cannot make an array of size '0'!"));
+                            }
+
+                            // TODO: alignment
+                            genf!(self, "%.s{tag} =l alloc4 {sz}");
+                            // genf!(self, "%.s{tag}.idx.0 =l copy %.s{tag}");
+                            // for i in 1..typ.elements {
+                            //     let bytes = i * inner.sizeof();
+                            //     genf!(self, "%.s{tag}.idx.{i} =l add %.s{tag}, {bytes}");
+                            // }
+                            
+                            // Get the expressions
+                            let mut vals = Vec::new();
+                            for expr in exprs {
+                                let val = self.emit_expr(comptime, expr, Some(*inner.clone()))?;
+                                vals.push(val);
+                            }
+
+                            // Type check the expressions and copy
+                            for (i, val) in vals.iter().enumerate() {
+                                if val.typ != **inner {
+                                    return Err(error!(token.loc(), "Expected {} for array member, got {} instead", (*inner), (val.typ)));
+                                }
+                                let qtype = val.typ.qbe_type();
+                                // genf!(self, "store{qtype} %.s{val}, %.s{tag}.idx.{i}");
+                                let ptr = self.tag_offset(tag, inner, i);
+                                self.store_type(&val.typ, val.tag, format!("%.s{ptr}"));
+                            }
+                            Ok(StackValue{tag, typ})
+                        },
+                        _ => return Err(error!(token.loc(), "Cannot initialize {typ} with initializer list")),
+                    }
+                } else {
+                    Err(error!(token.loc(), "Cannot infer type of initializer list"))
                 }
             },
         }

@@ -1,0 +1,9 @@
+module hello;
+
+main :: fn() {
+    let x: [3]u32 = {1, 2, 3};
+    dbg x;
+    x[0] = 69;
+    x[1] = 1337;
+    dbg x;
+}
