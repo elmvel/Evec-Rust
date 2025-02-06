@@ -134,6 +134,7 @@ pub struct Type {
     pub struct_kind: StructKind,
     // pub inner_type: u64, // We don't need this to exist now, but it should point to the typekind of the inner field?
     pub elements: usize, // Compile time only
+    pub infer_elements: bool,
     pub inner: Option<Box<Type>>,
 }
 
@@ -144,6 +145,7 @@ impl Into<Type> for TypeKind {
             indirection: 0,
             struct_kind: StructKind::CountStructs,
             elements: 0,
+            infer_elements: false,
             inner: None,
         }
     }
@@ -173,12 +175,13 @@ pub enum StructKind {
 }
 
 impl Type {
-    pub fn wrap(typ: Type, struct_kind: StructKind, elements: Option<usize>) -> Self {
+    pub fn wrap(typ: Type, struct_kind: StructKind, elements: Option<usize>, infer_elements: bool) -> Self {
         Self {
             kind: TypeKind::Structure,
             indirection: 0,
             struct_kind: struct_kind,
             elements: elements.unwrap_or(0),
+            infer_elements,
             inner: Some(Box::new(typ)),
         }
     }
@@ -197,6 +200,7 @@ impl Type {
             indirection: self.indirection + 1,
             struct_kind: self.struct_kind.clone(),
             elements: self.elements,
+            infer_elements: self.infer_elements,
             inner: self.inner.clone(),
         }
     }
@@ -207,6 +211,7 @@ impl Type {
             indirection: self.indirection.checked_sub(1).unwrap_or(0),
             struct_kind: self.struct_kind.clone(),
             elements: self.elements,
+            infer_elements: self.infer_elements,
             inner: self.inner.clone(),
         }
     }
@@ -295,6 +300,18 @@ impl Type {
             TypeKind::U64 | TypeKind::U32 | TypeKind::U16 | TypeKind::U8 => true,
             _ => false,
         }
+    }
+
+    pub fn soft_equals(&mut self, rhs: &mut Type) -> bool {
+        if self.infer_elements && !rhs.infer_elements {
+            self.elements = rhs.elements;
+            self.infer_elements = false;
+        }
+        if !self.infer_elements && rhs.infer_elements {
+            rhs.elements = self.elements;
+            rhs.infer_elements = false;
+        }
+        self == rhs
     }
 }
 

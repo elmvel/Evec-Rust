@@ -7,7 +7,7 @@ main :: fn() {
 }
 
 // Inferring here will throw an error
-bar :: fn(x: [3]u32) -> u32 {
+bar :: fn(x: [_]u32) -> u32 {
     dbg x;
     return x[0];
 }

@@ -64,13 +64,23 @@ impl Parser {
             Ok(self.parse_type()?.ptr())
         } else if self.lexer.eat(Token::Op(ldef!(), '[')) {
             let size = self.parse_expr()?;
-            let Expr::Number(Token::Int(_, n)) = size else {
-                // TODO: constexpr
-                return Err(error!(size.loc(), "Expected numerical constant here!"));
-            };
-            self.expect(Token::Op(ldef!(), ']'))?;
-            let inner = self.parse_type()?;
-            Ok(Type::wrap(inner, StructKind::Array, Some(n as usize)))
+            match size {
+                Expr::Ident(ref token) => {
+                    if token.is_sink_ident() {
+                        self.expect(Token::Op(ldef!(), ']'))?;
+                        let inner = self.parse_type()?;
+                        Ok(Type::wrap(inner, StructKind::Array, None, true))
+                    } else {
+                        Err(error!(size.loc(), "Expected numerical constant here!"))
+                    }
+                },
+                Expr::Number(Token::Int(_, n)) => {
+                    self.expect(Token::Op(ldef!(), ']'))?;
+                    let inner = self.parse_type()?;
+                    Ok(Type::wrap(inner, StructKind::Array, Some(n as usize), false))
+                },
+                _ => Err(error!(size.loc(), "Expected numerical constant here!")),
+            }
         } else {
             let typ = match self.lexer.next() {
                 Token::U64(_) => TypeKind::U64.into(),

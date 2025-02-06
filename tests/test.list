@@ -27,3 +27,5 @@
 ../target/debug/main ./array3.eve && ./b.out
 ../target/debug/main ./array4.eve && ./b.out
 ../target/debug/main ./array5.eve && ./b.out
+../target/debug/main ./array6.eve && ./b.out
+../target/debug/main ./array7.eve && ./b.out

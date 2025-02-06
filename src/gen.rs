@@ -226,6 +226,9 @@ macro_rules! gen_funcall_from_funcdef {
 
             // Type check arguments
             for i in 0..stack_values.len() {
+                if def.params.get(i).unwrap().1.infer_elements {
+                    return Err(error!(def.params[i].0.loc(), "Inferring array sizes is not supported in function parameters!"));
+                }
                 if stack_values[i].typ != def.params.get(i).unwrap().1 {
                     return Err(error!(def.params[i].0.loc(), "Parameter expected type {}, but got {} instead.", (def.params[i].1), (stack_values[i].typ)));
                 }
@@ -602,7 +605,7 @@ impl Generator {
                 
                 let expr = self.emit_expr(comptime, expr, typ.clone())?;
 
-                let val = if allocate {
+                let mut val = if allocate {
                     let tag = self.ctx.alloc();
                     // TODO: alignment
                     genf!(self, "%.s{tag} =l alloc4 {}", (expr.typ.sizeof()));
@@ -613,8 +616,8 @@ impl Generator {
                     expr
                 };
                 
-                if let Some(expected_type) = typ {
-                    if val.typ != expected_type {
+                if let Some(mut expected_type) = typ {
+                    if !val.typ.soft_equals(&mut expected_type) {
                         return Err(error!(loc, "Expected type {expected_type}, but got {} instead", (val.typ)));
                     }
                 }
@@ -1066,12 +1069,16 @@ impl Generator {
                 }
             },
             Expr::InitList(token, exprs) => {
-                if let Some(typ) = expected_type {
+                if let Some(mut typ) = expected_type {
                     if typ.kind != TypeKind::Structure {
                         return Err(error!(token.loc(), "Cannot initialize {typ} with initializer list"));
                     }
                     match typ.struct_kind {
                         StructKind::Array => {
+                            if typ.infer_elements {
+                                typ.elements = exprs.len();
+                                typ.infer_elements = false;
+                            }
                             if typ.elements != exprs.len() {
                                 return Err(error!(token.loc(), "Type expected {} arguments for initializer list", (typ.elements)));
                             }
