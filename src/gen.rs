@@ -551,6 +551,39 @@ impl Generator {
         }
     }
 
+    fn extend_to_long(&mut self, tag: usize, typ: &Type) -> usize {
+        match typ.sizeof() {
+            1 => {
+                let t = self.ctx.alloc();
+                if typ.unsigned() {
+                    genf!(self, "%.s{t} =l extub %.s{tag}");
+                } else {
+                    genf!(self, "%.s{t} =l extsb %.s{tag}");
+                }
+                t
+            },
+            2 => {
+                let t = self.ctx.alloc();
+                if typ.unsigned() {
+                    genf!(self, "%.s{t} =l extuh %.s{tag}");
+                } else {
+                    genf!(self, "%.s{t} =l extsh %.s{tag}");
+                }
+                t
+            },
+            4 => {
+                let t = self.ctx.alloc();
+                if typ.unsigned() {
+                    genf!(self, "%.s{t} =l extuw %.s{tag}");
+                } else {
+                    genf!(self, "%.s{t} =l extsw %.s{tag}");
+                }
+                t
+            },
+            _ => tag,
+        }
+    }
+
     pub fn emit_stmt(&mut self, comptime: &mut Compiletime, stmt: Stmt) -> Result<()> {
         match stmt {
             Stmt::Dbg(expr) => {
@@ -774,6 +807,7 @@ impl Generator {
                     Op::Eq => {
                         match *box_lhs {
                             Expr::Ident(Token::Ident(loc, text)) => {
+                                // EQ => Assigning to a variable
                                 let val = self.ctx.lookup(&text, loc.clone())?;
 
                                 let new = self.emit_expr(comptime, *box_rhs, Some(val.typ.clone()))?;
@@ -787,6 +821,7 @@ impl Generator {
                                 Ok(new)
                             },
                             Expr::UnOp(Op::Mul, box_expr) => {
+                                // EQ => Assigning to a dereferenced variable
                                 let loc = box_expr.loc();
                                 let ptr = self.emit_expr(comptime, *box_expr, None)?;
                                 
@@ -803,6 +838,27 @@ impl Generator {
                                 // genf!(self, "store{qtype} %.s{}, %.s{}", (new.tag), (ptr.tag));
                                 self.store_type(&deref, new.tag, format!("%.s{ptr}"));
                                 Ok(new)
+                            },
+                            Expr::BinOp(Op::Arr, box_lhs2, box_rhs2) => {
+                                // EQ => Assigning to an indexed variable
+                                let lloc = box_lhs2.loc();
+                                let rloc = box_rhs2.loc();
+                                
+                                let lval = self.emit_expr(comptime, *box_lhs2, None)?;
+                                let rval = self.emit_expr(comptime, *box_rhs2, None)?;
+                                lval.typ.assert_indexable(lloc)?;
+                                rval.typ.assert_number(rloc)?;
+
+                                let rtag = self.extend_to_long(rval.tag, &rval.typ);                       
+                                let bytes = self.ctx.alloc();
+                                let ptr = self.ctx.alloc();
+                                let Some(ref inner) = lval.typ.inner else { unreachable!() };
+                                genf!(self, "%.s{bytes} =l mul %.s{rtag}, {}", (inner.sizeof()));
+                                genf!(self, "%.s{ptr} =l add %.s{lval}, %.s{bytes}");
+
+                                let val = self.emit_expr(comptime, *box_rhs, Some(*inner.clone()))?;
+                                self.store_type(&val.typ, val.tag, format!("%.s{ptr}"));
+                                Ok(val)
                             },
                             e => return Err(error!(e.loc(), "Expected variable or deref assignment")),
                         }
@@ -902,37 +958,7 @@ impl Generator {
                         
                         // We need the index to be a 64 bit value
                         // TODO: maybe factor this out too?
-                        let rtag = match rval.typ.sizeof() {
-                            1 => {
-                                let t = self.ctx.alloc();
-                                if rval.typ.unsigned() {
-                                    genf!(self, "%.s{t} =l extub %.s{rval}");
-                                } else {
-                                    genf!(self, "%.s{t} =l extsb %.s{rval}");
-                                }
-                                t
-                            },
-                            2 => {
-                                let t = self.ctx.alloc();
-                                if rval.typ.unsigned() {
-                                    genf!(self, "%.s{t} =l extuh %.s{rval}");
-                                } else {
-                                    genf!(self, "%.s{t} =l extsh %.s{rval}");
-                                }
-                                t
-                            },
-                            4 => {
-                                let t = self.ctx.alloc();
-                                if rval.typ.unsigned() {
-                                    genf!(self, "%.s{t} =l extuw %.s{rval}");
-                                } else {
-                                    genf!(self, "%.s{t} =l extsw %.s{rval}");
-                                }
-                                t
-                            },
-                            _ => rval.tag,
-                        };
-                        
+                        let rtag = self.extend_to_long(rval.tag, &rval.typ);                       
                         let bytes = self.ctx.alloc();
                         let ptr = self.ctx.alloc();
                         let Some(ref inner) = lval.typ.inner else { unreachable!() };
