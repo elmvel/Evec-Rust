@@ -57,8 +57,8 @@ impl Decorator {
             Expr::Path(_, _) => { () },
             Expr::Number(_) => { () },
             Expr::Bool(_) => { () },
-            Expr::BinOp(_, _, _) => { () },
-            Expr::UnOp(_, _) => { () },
+            Expr::BinOp(_, _, _, _) => { () },
+            Expr::UnOp(_, _, _, _) => { () },
             Expr::Func(_, _, _, stmts, ref mut ret) => {
                 let mut returns = false;
                 for stmt in stmts {
@@ -71,6 +71,7 @@ impl Decorator {
             Expr::Call(_, _) => { () },
             Expr::Null(_) => { () },
             Expr::InitList(_, _) => { () },
+            Expr::Range(_, _, _) => { () },
         }
     }
 
@@ -107,6 +108,7 @@ impl Decorator {
             Stmt::Return(_, _) => {
                 true
             },
+            Stmt::Defer(_, box_stmt) => { Self::rtc_stmt(box_stmt) },
         }
     }
 
@@ -132,11 +134,11 @@ impl Decorator {
             Expr::Path(_, _) => { () },
             Expr::Number(_) => { () },
             Expr::Bool(_) => { () },
-            Expr::BinOp(_, box_lhs, box_rhs) => {
+            Expr::BinOp(_, _, box_lhs, box_rhs) => {
                 Self::gav_expr(box_lhs, addrvars);
                 Self::gav_expr(box_rhs, addrvars);
             },
-            Expr::UnOp(op, box_expr) => {
+            Expr::UnOp(_, op, box_expr, _) => {
                 if *op == Op::And {
                     if let Expr::Ident(Token::Ident(_, ref text)) = **box_expr {
                         addrvars.insert(text.clone());
@@ -159,6 +161,7 @@ impl Decorator {
                     Self::gav_expr(expr, addrvars);
                 }
             },
+            Expr::Range(_, _, _) => { /* Even though we have expressions here, they cannot be pointers */ () },
         }
     }
 
@@ -196,6 +199,7 @@ impl Decorator {
                     Self::gav_expr(expr, addrvars);
                 }
             },
+            Stmt::Defer(_, box_stmt) => { Self::gav_stmt(box_stmt, addrvars) },
         }
     }
 }

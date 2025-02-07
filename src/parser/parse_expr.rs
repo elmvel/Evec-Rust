@@ -61,6 +61,17 @@ impl Parser {
                 Token::Int(_, _) => Expr::Number(token),
                 Token::True(_) | Token::False(_) => Expr::Bool(token),
                 Token::Null(loc) => Expr::Null(Token::Null(loc)),
+                Token::WideOp(loc, ('.', '.')) => {
+                    match self.lexer.peek() {
+                        Token::Ident(_, _) | Token::Int(_, _) => {
+                            let ((), r_bp) = prefix_binding_power(('.', '.').try_into()?)?;
+                            let rhs = self.parse_expr_bp(r_bp);
+                            Expr::UnOp(Token::WideOp(loc, ('.', '.')), ('.', '.').try_into()?, Box::new(rhs?), false)
+                        },
+                        _ => Expr::Range(Token::WideOp(loc, ('.', '.')), None, None),
+                    }
+                },
+
                 Token::Op(_, '(') => {
                     let lhs = self.parse_expr_bp(0);
                     self.expect(Token::Op(ldef!(), ')'))?;
@@ -78,10 +89,10 @@ impl Parser {
                     self.expect(Token::Op(ldef!(), '}'))?;
                     Expr::InitList(Token::Op(loc, '{'), exprs)
                 },
-                Token::Op(_, op) => {
+                Token::Op(loc, op) => {
                     let ((), r_bp) = prefix_binding_power(op.try_into()?)?;
                     let rhs = self.parse_expr_bp(r_bp);
-                    Expr::UnOp(op.try_into()?, Box::new(rhs?))
+                    Expr::UnOp(Token::Op(loc, op), op.try_into()?, Box::new(rhs?), false)
                 },
                 Token::Fn(loc) => {
                     self.expect(Token::Op(ldef!(), '('))?;
@@ -131,14 +142,38 @@ impl Parser {
                 if l_bp < min_bp { 
                     break;
                 }
-                self.lexer.next();
+                let optok = self.lexer.next();
                 
                 lhs = if op == Op::Arr {
                     let rhs = self.parse_expr_bp(0);
                     assert_eq!(self.lexer.next(), Token::Op(ldef!(), ']'));
-                    Expr::BinOp(op, Box::new(lhs), Box::new(rhs?))
+                    match rhs? {
+                        Expr::BinOp(t, Op::Range, box_lhs, box_rhs) => {
+                            let range = Expr::Range(t, Some(box_lhs), Some(box_rhs));
+                            Expr::BinOp(optok, op, Box::new(lhs), Box::new(range))
+                        },
+                        Expr::UnOp(t, Op::Range, box_expr, postfix) => {
+                            let range = if postfix {
+                                Expr::Range(t, Some(box_expr), None)
+                            } else {
+                                Expr::Range(t, None, Some(box_expr))
+                            };
+                            Expr::BinOp(optok, op, Box::new(lhs), Box::new(range))
+                        },
+                        rhs => Expr::BinOp(optok, op, Box::new(lhs), Box::new(rhs)),
+                    }
                 } else {
-                    Expr::UnOp(op, Box::new(lhs))
+                    if op == Op::Range {
+                        match self.lexer.peek() {
+                            Token::Ident(_, _) | Token::Int(_, _) => {
+                                let rhs = self.parse_expr_bp(0)?;
+                                Expr::BinOp(optok, op, Box::new(lhs), Box::new(rhs))
+                            },
+                            _ =>  Expr::UnOp(optok, op, Box::new(lhs), true),
+                        }
+                    } else {
+                        Expr::UnOp(optok, op, Box::new(lhs), true)
+                    }
                 };
                 
                 continue;
@@ -149,10 +184,10 @@ impl Parser {
                     break;
                 }
                 
-                self.lexer.next();
+                let optok = self.lexer.next();
                 let rhs = self.parse_expr_bp(r_bp);
                 
-                lhs = Expr::BinOp(op, Box::new(lhs), Box::new(rhs?));
+                lhs = Expr::BinOp(optok, op, Box::new(lhs), Box::new(rhs?));
                 continue;
             }
             
@@ -160,6 +195,10 @@ impl Parser {
         }
         
         Ok(lhs)
+    }
+    
+    fn try_parse_range() -> Result<Option<Expr>> {
+        todo!()
     }
     
 }

@@ -35,6 +35,7 @@ impl Parser {
         bubble_stmt!(self.parse_stmt_break());
         bubble_stmt!(self.parse_stmt_continue());
         bubble_stmt!(self.parse_stmt_return());
+        bubble_stmt!(self.parse_stmt_defer());
 
         bubble_stmt!(self.parse_stmt_expr());
 
@@ -63,6 +64,12 @@ impl Parser {
         if self.lexer.eat(Token::Op(ldef!(), '*')) {
             Ok(self.parse_type()?.ptr())
         } else if self.lexer.eat(Token::Op(ldef!(), '[')) {
+            // Slice
+            if self.lexer.eat(Token::Op(ldef!(), ']')) {
+                let inner = self.parse_type()?;
+                return Ok(Type::wrap(inner, StructKind::Slice, None, false));
+            }
+            // Array
             let size = self.parse_expr()?;
             match size {
                 Expr::Ident(ref token) => {
@@ -211,6 +218,15 @@ impl Parser {
         
         self.expect(Token::Op(ldef!(), ';'))?;
         Ok(Some(Stmt::Return(loc, expr)))
+    }
+
+    pub fn parse_stmt_defer(&mut self) -> Result<Option<Stmt>> {
+        if self.lexer.peek() != Token::Defer(ldef!()) {
+            return Ok(None);
+        }
+        let Token::Defer(loc) = self.lexer.next() else { unreachable!() };
+        let stmt = self.parse_stmt()?;
+        Ok(Some(Stmt::Defer(loc, Box::new(stmt))))
     }
 
     pub fn parse_stmt_expr(&mut self) -> Result<Option<Stmt>> {

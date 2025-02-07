@@ -1,0 +1,21 @@
+module hello;
+
+main :: fn() {
+    let xs: [_]u32 = {1, 2, 3};
+    let slc1 = xs[..];
+    let slc2 = xs[1..];
+    let slc3 = xs[..2];
+    let slc4 = xs[1..2];
+    dbg 10000;
+    dbg slc1[0];
+    dbg slc1[1];
+    dbg slc1[2];
+    dbg 20000;
+    dbg slc2[0];
+    dbg slc2[1];
+    dbg 30000;
+    dbg slc3[0];
+    dbg slc3[1];
+    dbg 40000;
+    dbg slc4[0];
+}

@@ -1,0 +1,11 @@
+module hello;
+
+main :: fn() {
+    defer {
+        defer dbg 69;
+        dbg 1;
+        dbg 2;
+        dbg 3;
+    }
+    dbg 4;
+}

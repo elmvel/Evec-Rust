@@ -24,6 +24,7 @@ pub enum Op {
     EqEq,
     NotEq,
     And,
+    Range,
 }
 
 impl Op {
@@ -68,6 +69,7 @@ impl TryInto<Op> for (char, char) {
             ('<', '=') => Ok(Op::Le),
             ('=', '=') => Ok(Op::EqEq),
             ('!', '=') => Ok(Op::NotEq),
+            ('.', '.') => Ok(Op::Range),
             c => Err(error_orphan!("Could not convert to op: {c:?}")),
         }
     }
@@ -91,6 +93,7 @@ pub enum Stmt {
     Break(Location),
     Continue(Location),
     Return(Location, Option<Expr>),
+    Defer(Location, Box<Stmt>),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -102,12 +105,13 @@ pub enum Expr {
     Path(Token, Box<Expr>), // std::io => (String std) (::) (*Expr(io))
     Number(Token),
     Bool(Token),
-    BinOp(Op, Box<Expr>, Box<Expr>),
-    UnOp(Op, Box<Expr>),
+    BinOp(Token, Op, Box<Expr>, Box<Expr>),
+    UnOp(Token, Op, Box<Expr>, bool), // bool stores prefix/postfix
     Func(Token, Vec<Param>, Option<Type>, Vec<Stmt>, bool), // Eventually Func(Token, Vec<Param>, RetType, Vec<Stmt>)
     Call(Box<Expr>, Vec<Expr>), // TODO: add parameters
     Null(Token),
     InitList(Token, Vec<Expr>), // First token is just for easy location
+    Range(Token, Option<Box<Expr>>, Option<Box<Expr>>),
 }
 
 impl Expr {
@@ -117,12 +121,13 @@ impl Expr {
             Expr::Path(t, _) => t.loc(),
             Expr::Number(t) => t.loc(),
             Expr::Bool(t) => t.loc(),
-            Expr::BinOp(_, lhs, _) => lhs.loc(),
-            Expr::UnOp(_, expr) => expr.loc(),
+            Expr::BinOp(t, _, _, _) => t.loc(),
+            Expr::UnOp(t, _, _, _) => t.loc(),
             Expr::Func(t, _, _, _, _) => t.loc(),
             Expr::Call(t, _) => t.loc(),
             Expr::Null(t) => t.loc(),
             Expr::InitList(t, _) => t.loc(),
+            Expr::Range(t, _, _) => t.loc(),
         }
     }
 }
@@ -171,6 +176,7 @@ pub enum TypeKind {
 #[repr(u8)]
 pub enum StructKind {
     Array,
+    Slice,
     CountStructs,
 }
 
@@ -231,6 +237,46 @@ impl Type {
                     StructKind::Array => {
                         "l"
                     },
+                    StructKind::Slice => {
+                        "l"
+                    },
+                    _ => todo!("Should be able to determine the structure qbe type based on the struct id"),
+                }
+            },
+        }
+    }
+
+    // NOTE: NOT equivalent to ABITY in QBE docs
+    // This is strictly for temporaries, where we may want to indicate that we are
+    // recieving a struct from a call
+    pub fn qbe_abi_type(&self) -> &str {
+        if self.kind == TypeKind::Structure {
+            self.qbe_ext_type()
+        } else {
+            self.qbe_type()
+        }
+    }
+
+    pub fn qbe_ext_type(&self) -> &str {
+        if self.is_ptr() {
+            return "l";
+        }
+        match self.kind {
+            TypeKind::U64 | TypeKind::S64 => "l",
+            TypeKind::U32 | TypeKind::S32 => "w",
+            TypeKind::U16 => "uh",
+            TypeKind::S16 => "sh",
+            TypeKind::U8  => "ub",
+            TypeKind::S8  => "sb",
+            TypeKind::Void | TypeKind::Bool => "w",
+            TypeKind::Structure => {
+                match self.struct_kind {
+                    StructKind::Array => {
+                        "l"
+                    },
+                    StructKind::Slice => {
+                        ":slice"
+                    },
                     _ => todo!("Should be able to determine the structure qbe type based on the struct id"),
                 }
             },
@@ -253,6 +299,9 @@ impl Type {
                     StructKind::Array => {
                         let Some(ref inner) = self.inner else { unreachable!() };
                         self.elements * inner.sizeof()
+                    },
+                    StructKind::Slice => {
+                        16
                     },
                     _ => todo!("need to lookup in some strucure table"),
                 }
@@ -287,7 +336,7 @@ impl Type {
         }
         if self.is_struct() {
             match self.struct_kind {
-                StructKind::Array => { Ok(()) },
+                StructKind::Array | StructKind::Slice => { Ok(()) },
                 _ => todo!("Probably allow slices too, but nothing else (maybe strings)"),
             }
         } else {
@@ -337,6 +386,10 @@ impl fmt::Display for Type {
                         let Some(ref inner) = self.inner else { unreachable!("idk how to error out here") };
                         write!(f, "[{}]{}", self.elements, *inner)
                     }, 
+                    StructKind::Slice => {
+                        let Some(ref inner) = self.inner else { unreachable!("idk how to error out here") };
+                        write!(f, "[]{}", *inner)
+                    },
                     _ => todo!("Another structure table call"),
                 }
             },

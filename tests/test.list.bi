@@ -1,4 +1,4 @@
-:i count 32
+:i count 38
 :b shell 41
 ../target/debug/main ./dbg.eve && ./b.out
 :i returncode 0
@@ -424,4 +424,85 @@ Created executable b.out!
 
 :b stderr 91
 ./return_check.eve:7:8: error: This function does not always return, but should return s32
+
+:b shell 45
+../target/debug/main ./slices1.eve && ./b.out
+:i returncode 0
+:b stdout 38
+Created executable b.out!
+1
+2
+3
+1
+2
+3
+
+:b stderr 0
+
+:b shell 45
+../target/debug/main ./slices2.eve && ./b.out
+:i returncode 0
+:b stdout 66
+Created executable b.out!
+10000
+1
+2
+3
+20000
+2
+3
+30000
+1
+2
+40000
+2
+
+:b stderr 0
+
+:b shell 43
+../target/debug/main ./defer.eve && ./b.out
+:i returncode 0
+:b stdout 37
+Created executable b.out!
+4
+1
+2
+3
+69
+
+:b stderr 0
+
+:b shell 59
+../target/debug/main ./slice_call_convention.eve && ./b.out
+:i returncode 0
+:b stdout 32
+Created executable b.out!
+1
+2
+3
+
+:b stderr 0
+
+:b shell 45
+../target/debug/main ./slices3.eve && ./b.out
+:i returncode 0
+:b stdout 38
+Created executable b.out!
+1
+1
+2
+2
+3
+3
+
+:b stderr 0
+
+:b shell 49
+../target/debug/main ./slices4_abi.eve && ./b.out
+:i returncode 0
+:b stdout 28
+Created executable b.out!
+6
+
+:b stderr 0
 
