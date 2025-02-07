@@ -246,6 +246,32 @@ impl Type {
         }
     }
 
+    pub fn qbe_ext_type(&self) -> &str {
+        if self.is_ptr() {
+            return "l";
+        }
+        match self.kind {
+            TypeKind::U64 | TypeKind::S64 => "l",
+            TypeKind::U32 | TypeKind::S32 => "w",
+            TypeKind::U16 => "uh",
+            TypeKind::S16 => "sh",
+            TypeKind::U8  => "ub",
+            TypeKind::S8  => "sb",
+            TypeKind::Void | TypeKind::Bool => "w",
+            TypeKind::Structure => {
+                match self.struct_kind {
+                    StructKind::Array => {
+                        "l"
+                    },
+                    StructKind::Slice => {
+                        ":slice"
+                    },
+                    _ => todo!("Should be able to determine the structure qbe type based on the struct id"),
+                }
+            },
+        }
+    }
+
     pub fn sizeof(&self) -> usize {
         if self.is_ptr() {
             return 8;

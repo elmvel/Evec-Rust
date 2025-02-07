@@ -240,7 +240,7 @@ macro_rules! gen_funcall_from_funcdef {
             gen!($slf, "{}", (stack_values
                               .iter()
                               .map(|StackValue{tag, typ}| {
-                                  let qtype = typ.qbe_type();
+                                  let qtype = typ.qbe_ext_type();
                                   format!("{qtype} %.s{tag}")
                               })
                               .collect::<Vec<String>>()
@@ -404,7 +404,7 @@ impl Generator {
             gen!(self, "{}", (params
                   .iter()
                   .map(|Param(tag, typ)| {
-                      let f = format!("{} %.s{hack}", typ.qbe_type());
+                      let f = format!("{} %.s{hack}", typ.qbe_ext_type());
                       hack += 1;
                       f
                   })
@@ -420,7 +420,7 @@ impl Generator {
             gen!(self, "{}", (params
                   .iter()
                   .map(|Param(tag, typ)| {
-                      let f = format!("{} %.s{hack}", typ.qbe_type());
+                      let f = format!("{} %.s{hack}", typ.qbe_ext_type());
                       hack += 1;
                       f
                   })
