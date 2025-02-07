@@ -1,4 +1,4 @@
-:i count 37
+:i count 38
 :b shell 41
 ../target/debug/main ./dbg.eve && ./b.out
 :i returncode 0
@@ -494,6 +494,15 @@ Created executable b.out!
 2
 3
 3
+
+:b stderr 0
+
+:b shell 49
+../target/debug/main ./slices4_abi.eve && ./b.out
+:i returncode 0
+:b stdout 28
+Created executable b.out!
+6
 
 :b stderr 0
 

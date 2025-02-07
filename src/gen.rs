@@ -211,7 +211,7 @@ macro_rules! gen_funcall_from_funcdef {
             let tag = $slf.ctx.alloc();
             let txt = $text;
             let ret_type = def.ret_type.clone().unwrap_or(TypeKind::Void.into());
-            let qt = ret_type.qbe_type();
+            let qt = ret_type.qbe_abi_type();
 
             let arglen = $args.len();
             if arglen != parlen {
@@ -389,7 +389,7 @@ impl Generator {
             None => TypeKind::Void.into(),
         };
         let qbe_return_type = match ret_type {
-            Some(ref typ) => typ.qbe_type(),
+            Some(ref typ) => typ.qbe_ext_type(),
             None => "",
         };
 

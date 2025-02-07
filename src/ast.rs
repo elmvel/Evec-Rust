@@ -246,6 +246,17 @@ impl Type {
         }
     }
 
+    // NOTE: NOT equivalent to ABITY in QBE docs
+    // This is strictly for temporaries, where we may want to indicate that we are
+    // recieving a struct from a call
+    pub fn qbe_abi_type(&self) -> &str {
+        if self.kind == TypeKind::Structure {
+            self.qbe_ext_type()
+        } else {
+            self.qbe_type()
+        }
+    }
+
     pub fn qbe_ext_type(&self) -> &str {
         if self.is_ptr() {
             return "l";
