@@ -465,7 +465,7 @@ impl Generator {
             self.emit_stmt(comptime, stmt, &mut opt)?;
         }
         for stmt in deferred.drain(..).rev() {
-            self.emit_stmt(comptime, stmt, &mut none);
+            self.emit_stmt(comptime, stmt, &mut none)?;
         }
         self.pop_frame();
         Ok(())

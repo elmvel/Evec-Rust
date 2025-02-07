@@ -1,4 +1,4 @@
-:i count 38
+:i count 39
 :b shell 41
 ../target/debug/main ./dbg.eve && ./b.out
 :i returncode 0
@@ -505,4 +505,12 @@ Created executable b.out!
 6
 
 :b stderr 0
+
+:b shell 49
+../target/debug/main ./defer_defer.eve && ./b.out
+:i returncode 1
+:b stdout 0
+
+:b stderr 77
+./defer_defer.eve:4:11: error: Cannot defer here (did you try to nest them?)
 
