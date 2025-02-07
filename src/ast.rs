@@ -104,8 +104,8 @@ pub enum Expr {
     Path(Token, Box<Expr>), // std::io => (String std) (::) (*Expr(io))
     Number(Token),
     Bool(Token),
-    BinOp(Op, Box<Expr>, Box<Expr>),
-    UnOp(Op, Box<Expr>),
+    BinOp(Token, Op, Box<Expr>, Box<Expr>),
+    UnOp(Token, Op, Box<Expr>, bool), // bool stores prefix/postfix
     Func(Token, Vec<Param>, Option<Type>, Vec<Stmt>, bool), // Eventually Func(Token, Vec<Param>, RetType, Vec<Stmt>)
     Call(Box<Expr>, Vec<Expr>), // TODO: add parameters
     Null(Token),
@@ -120,8 +120,8 @@ impl Expr {
             Expr::Path(t, _) => t.loc(),
             Expr::Number(t) => t.loc(),
             Expr::Bool(t) => t.loc(),
-            Expr::BinOp(_, lhs, _) => lhs.loc(),
-            Expr::UnOp(_, expr) => expr.loc(),
+            Expr::BinOp(t, _, _, _) => t.loc(),
+            Expr::UnOp(t, _, _, _) => t.loc(),
             Expr::Func(t, _, _, _, _) => t.loc(),
             Expr::Call(t, _) => t.loc(),
             Expr::Null(t) => t.loc(),

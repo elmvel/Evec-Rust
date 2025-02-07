@@ -57,8 +57,8 @@ impl Decorator {
             Expr::Path(_, _) => { () },
             Expr::Number(_) => { () },
             Expr::Bool(_) => { () },
-            Expr::BinOp(_, _, _) => { () },
-            Expr::UnOp(_, _) => { () },
+            Expr::BinOp(_, _, _, _) => { () },
+            Expr::UnOp(_, _, _, _) => { () },
             Expr::Func(_, _, _, stmts, ref mut ret) => {
                 let mut returns = false;
                 for stmt in stmts {
@@ -133,11 +133,11 @@ impl Decorator {
             Expr::Path(_, _) => { () },
             Expr::Number(_) => { () },
             Expr::Bool(_) => { () },
-            Expr::BinOp(_, box_lhs, box_rhs) => {
+            Expr::BinOp(_, _, box_lhs, box_rhs) => {
                 Self::gav_expr(box_lhs, addrvars);
                 Self::gav_expr(box_rhs, addrvars);
             },
-            Expr::UnOp(op, box_expr) => {
+            Expr::UnOp(_, op, box_expr, _) => {
                 if *op == Op::And {
                     if let Expr::Ident(Token::Ident(_, ref text)) = **box_expr {
                         addrvars.insert(text.clone());

@@ -7,7 +7,7 @@ use crate::errors::SyntaxError;
 pub fn infix_binding_power(op: Op) -> Option<(u8, u8)> {
     let res = match op {
         Op::Eq => (2, 1),
-        Op::Eq => (3, 4),
+        Op::Range => (3, 4),
         Op::OrOr => (5, 6),
         Op::AndAnd => (7, 8),
         Op::EqEq | Op::NotEq => (9, 10),
@@ -22,6 +22,7 @@ pub fn infix_binding_power(op: Op) -> Option<(u8, u8)> {
 
 pub fn prefix_binding_power(op: Op) -> Result<((), u8)> {
     match op {
+        Op::Range => Ok(((), 3)),
         Op::Add | Op::Sub => Ok(((), 17)),
         Op::And | Op::Mul => Ok(((), 19)),
         _ => Err(error_orphan!("Bad expression op: {op:?}")),
@@ -30,6 +31,7 @@ pub fn prefix_binding_power(op: Op) -> Result<((), u8)> {
 
 pub fn postfix_binding_power(op: Op) -> Option<(u8, ())> {
     let res = match op {
+        Op::Range => (3, ()),
         Op::Excl | Op::Arr => (21, ()),
         _ => return None,
     };

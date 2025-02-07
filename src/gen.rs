@@ -812,7 +812,7 @@ impl Generator {
                 genf!(self, "%.s{tag} ={qtyp} copy {i}");
                 Ok(StackValue{ typ, tag })
             },
-            Expr::BinOp(op, box_lhs, box_rhs) => {
+            Expr::BinOp(_, op, box_lhs, box_rhs) => {
                 match op {
                     Op::Add | Op::Sub | Op::Mul | Op::Div => {
                         let lloc = box_lhs.loc();
@@ -859,9 +859,9 @@ impl Generator {
                                 genf!(self, "%.s{} ={qtyp} copy %.s{}", (val.tag), (new.tag));
                                 Ok(new)
                             },
-                            Expr::UnOp(Op::Mul, box_expr) => {
+                            Expr::UnOp(t, Op::Mul, box_expr, postfix) => {
                                 // EQ => Assigning to a dereferenced variable
-                                let loc = box_expr.loc();
+                                let loc = t.loc();
                                 let ptr = self.emit_expr(comptime, *box_expr, None)?;
                                 
                                 if !ptr.typ.is_ptr() {
@@ -878,7 +878,7 @@ impl Generator {
                                 self.store_type(&deref, new.tag, format!("%.s{ptr}"));
                                 Ok(new)
                             },
-                            Expr::BinOp(Op::Arr, box_lhs2, box_rhs2) => {
+                            Expr::BinOp(_, Op::Arr, box_lhs2, box_rhs2) => {
                                 // EQ => Assigning to an indexed variable
                                 let lloc = box_lhs2.loc();
                                 let rloc = box_rhs2.loc();
@@ -996,35 +996,77 @@ impl Generator {
                             
                             let lval = self.emit_expr(comptime, *box_lhs, None)?;
                             lval.typ.assert_indexable(lloc)?;
+                            let base = self.get_indexable_ptr(&lval);
 
-                            return match (lower, upper) {
+                            // Make the slice
+                            let tag = self.ctx.alloc();
+                            let sz_offset = self.ctx.alloc();
+                            let sz_ptr = self.ctx.alloc();
+                            genf!(self, "%.s{tag} =l alloc8 16");
+                            genf!(self, "%.s{sz_offset} =l copy 8"); // offset(slice.size)
+                            genf!(self, "%.s{sz_ptr} =l add %.s{tag}, %.s{sz_offset}"); // &slice.size
+
+                            let Some(ref inner) = lval.typ.inner else { unreachable!() };
+
+                            // Calculate the pointer and the length based on the range provided
+                            let (final_ptr, final_count) = match (lower.clone(), upper.clone()) {
                                 (Some(bl), Some(bu)) => {
-                                    todo!()
+                                    let lower_loc = bl.loc();
+                                    let upper_loc = bu.loc();
+                                    let lower = self.emit_expr(comptime, *bl, None)?;
+                                    let upper = self.emit_expr(comptime, *bu, None)?;
+                                    lower.typ.assert_number(lower_loc)?;
+                                    upper.typ.assert_number(upper_loc)?;
+
+                                    let ltag = self.extend_to_long(lower.tag, &lower.typ);
+                                    let utag = self.extend_to_long(upper.tag, &upper.typ);
+
+                                    let bytes = self.ctx.alloc();
+                                    let ptr = self.ctx.alloc();
+                                    genf!(self, "%.s{bytes} =l mul %.s{ltag}, {}", (inner.sizeof()));
+                                    genf!(self, "%.s{ptr} =l add %.s{base}, %.s{bytes}");
+
+                                    let count = self.ctx.alloc();
+                                    genf!(self, "%.s{count} =l sub %.s{utag}, %.s{ltag}");
+                                    (ptr, count)
                                 },
                                 (Some(bl), None) => {
-                                    todo!()
-                                },
-                                (None, Some(bu)) => {
-                                    todo!()
-                                },
-                                (None, None) => {
-                                    // Make the slice
-                                    let tag = self.ctx.alloc();
-                                    let sz_offset = self.ctx.alloc();
-                                    let sz_ptr = self.ctx.alloc();
-                                    genf!(self, "%.s{tag} =l alloc8 16");
-                                    genf!(self, "%.s{sz_offset} =l copy 8"); // offset(slice.size)
-                                    genf!(self, "%.s{sz_ptr} =l add %.s{tag}, %.s{sz_offset}"); // &slice.size
+                                    let lower_loc = bl.loc();
+                                    let lower = self.emit_expr(comptime, *bl, None)?;
+                                    lower.typ.assert_number(lower_loc)?;
 
-                                    // Store the range (no offsetting the ptr or anything here)
-                                    let Some(ref inner) = lval.typ.inner else { unreachable!() };
-                                    genf!(self, "storel %.s{lval}, %.s{tag}"); // Assumes array
+                                    let ltag = self.extend_to_long(lower.tag, &lower.typ);
+
+                                    let bytes = self.ctx.alloc();
+                                    let ptr = self.ctx.alloc();
+                                    genf!(self, "%.s{bytes} =l mul %.s{ltag}, {}", (inner.sizeof()));
+                                    genf!(self, "%.s{ptr} =l add %.s{base}, %.s{bytes}");
+
                                     let count = self.ctx.alloc();
                                     genf!(self, "%.s{count} =l copy {}", (lval.typ.elements));
-                                    genf!(self, "storel %.s{count}, %.s{sz_ptr}"); // Assumes array
-                                    Ok(StackValue{tag, typ: Type::wrap(*inner.clone(), StructKind::Slice, None, false)})
+                                    genf!(self, "%.s{count} =l sub %.s{count}, %.s{ltag}");
+                                    (ptr, count)
                                 },
-                            }
+                                (None, Some(bu)) => {
+                                    let upper_loc = bu.loc();
+                                    let upper = self.emit_expr(comptime, *bu, None)?;
+                                    upper.typ.assert_number(upper_loc)?;
+
+                                    let utag = self.extend_to_long(upper.tag, &upper.typ);
+
+                                    (lval.tag, utag)
+                                },
+                                (None, None) => {
+                                    let count = self.ctx.alloc();
+                                    genf!(self, "%.s{count} =l copy {}", (lval.typ.elements));
+                                    (lval.tag, count)
+                                },
+                            };
+
+                            // Store the range (no offsetting the ptr or anything here)
+                            genf!(self, "storel %.s{final_ptr}, %.s{tag}"); // Assumes array
+                            genf!(self, "storel %.s{final_count}, %.s{sz_ptr}"); // Assumes array
+                            return Ok(StackValue{tag, typ: Type::wrap(*inner.clone(), StructKind::Slice, None, false)});
                         }
 
                         // Array
@@ -1039,7 +1081,8 @@ impl Generator {
                         
                         // We need the index to be a 64 bit value
                         // TODO: maybe factor this out too?
-                        let rtag = self.extend_to_long(rval.tag, &rval.typ);                       
+                        let rtag = self.extend_to_long(rval.tag, &rval.typ);
+
                         let bytes = self.ctx.alloc();
                         let ptr = self.ctx.alloc();
                         let Some(ref inner) = lval.typ.inner else { unreachable!() };
@@ -1051,7 +1094,7 @@ impl Generator {
                     _ => todo!()
                 }
             },
-            Expr::UnOp(ch, box_expr) => {
+            Expr::UnOp(_, ch, box_expr, postfix) => {
                 match ch {
                     Op::Sub => {
                         match *box_expr {
