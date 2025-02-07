@@ -34,3 +34,4 @@
 ../target/debug/main ./slices2.eve && ./b.out
 ../target/debug/main ./defer.eve && ./b.out
 ../target/debug/main ./slice_call_convention.eve && ./b.out
+../target/debug/main ./slices3.eve && ./b.out

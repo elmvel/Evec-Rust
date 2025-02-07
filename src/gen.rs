@@ -516,9 +516,10 @@ impl Generator {
                             genf!(self, "%.s{sz_offset} =l copy 8"); // offset(slice.size)
                             genf!(self, "%.s{sz_ptr} =l add %.s{val}, %.s{sz_offset}"); // &slice.size
                             let sz = self.load_type(&TypeKind::U64.into(), sz_ptr, format!("%.s{sz_ptr}")); // slice.size
+                            let ptr = self.load_type(&TypeKind::U64.into(), val.tag, format!("%.s{val}")); // slice.size
 
                             genf!(self, "%.void =w call $printf(l $fmt_arr_start, ...)");
-                            genf!(self, "%.void =w call $printf(l $fmt_ptr, ..., l %.s{})", val);
+                            genf!(self, "%.void =w call $printf(l $fmt_ptr, ..., l %.s{})", ptr);
                             genf!(self, "%.void =w call $printf(l $fmt_ll, ..., l %.s{})", sz);
                             genf!(self, "%.void =w call $printf(l $fmt_arr_end, ...)");
                         },
@@ -1009,8 +1010,21 @@ impl Generator {
                             let rloc = box_rhs.loc();
                             
                             let lval = self.emit_expr(comptime, *box_lhs, None)?;
-                            lval.typ.assert_indexable(lloc)?;
+                            lval.typ.assert_indexable(lloc.clone())?;
                             let base = self.get_indexable_ptr(&lval);
+                            let base_count = match lval.typ.struct_kind {
+                                StructKind::Array => {
+                                    let bc = self.ctx.alloc();
+                                    genf!(self, "%.s{bc} =l copy {}", (lval.typ.elements));
+                                    bc
+                                }
+                                StructKind::Slice => {
+                                    let bc_ptr = self.ctx.alloc();
+                                    genf!(self, "%.s{bc_ptr} =l add %.s{lval}, 8");
+                                    self.load_type(&TypeKind::U64.into(), bc_ptr, format!("%.s{bc_ptr}"))
+                                },
+                                _ => return Err(error!(lloc, "Cannot index type {}", (lval.typ))),
+                            };
 
                             // Make the slice
                             let tag = self.ctx.alloc();
@@ -1057,8 +1071,7 @@ impl Generator {
                                     genf!(self, "%.s{ptr} =l add %.s{base}, %.s{bytes}");
 
                                     let count = self.ctx.alloc();
-                                    genf!(self, "%.s{count} =l copy {}", (lval.typ.elements));
-                                    genf!(self, "%.s{count} =l sub %.s{count}, %.s{ltag}");
+                                    genf!(self, "%.s{count} =l sub %.s{base_count}, %.s{ltag}");
                                     (ptr, count)
                                 },
                                 (None, Some(bu)) => {
@@ -1068,12 +1081,10 @@ impl Generator {
 
                                     let utag = self.extend_to_long(upper.tag, &upper.typ);
 
-                                    (lval.tag, utag)
+                                    (base, utag)
                                 },
                                 (None, None) => {
-                                    let count = self.ctx.alloc();
-                                    genf!(self, "%.s{count} =l copy {}", (lval.typ.elements));
-                                    (lval.tag, count)
+                                    (base, base_count)
                                 },
                             };
 
