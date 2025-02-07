@@ -1,4 +1,4 @@
-:i count 34
+:i count 35
 :b shell 41
 ../target/debug/main ./dbg.eve && ./b.out
 :i returncode 0
@@ -456,6 +456,19 @@ Created executable b.out!
 2
 40000
 2
+
+:b stderr 0
+
+:b shell 43
+../target/debug/main ./defer.eve && ./b.out
+:i returncode 0
+:b stdout 37
+Created executable b.out!
+4
+1
+2
+3
+69
 
 :b stderr 0
 

@@ -35,6 +35,7 @@ impl Parser {
         bubble_stmt!(self.parse_stmt_break());
         bubble_stmt!(self.parse_stmt_continue());
         bubble_stmt!(self.parse_stmt_return());
+        bubble_stmt!(self.parse_stmt_defer());
 
         bubble_stmt!(self.parse_stmt_expr());
 
@@ -217,6 +218,15 @@ impl Parser {
         
         self.expect(Token::Op(ldef!(), ';'))?;
         Ok(Some(Stmt::Return(loc, expr)))
+    }
+
+    pub fn parse_stmt_defer(&mut self) -> Result<Option<Stmt>> {
+        if self.lexer.peek() != Token::Defer(ldef!()) {
+            return Ok(None);
+        }
+        let Token::Defer(loc) = self.lexer.next() else { unreachable!() };
+        let stmt = self.parse_stmt()?;
+        Ok(Some(Stmt::Defer(loc, Box::new(stmt))))
     }
 
     pub fn parse_stmt_expr(&mut self) -> Result<Option<Stmt>> {

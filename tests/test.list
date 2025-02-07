@@ -32,3 +32,4 @@
 ../target/debug/main ./return_check.eve && ./b.out
 ../target/debug/main ./slices1.eve && ./b.out
 ../target/debug/main ./slices2.eve && ./b.out
+../target/debug/main ./defer.eve && ./b.out

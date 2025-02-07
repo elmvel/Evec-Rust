@@ -458,8 +458,14 @@ impl Generator {
             Some(frame) => self.ctx.frames.push(frame),
             None => self.push_frame(),
         }
+        let mut deferred = Vec::new();
+        let mut opt: Option<&mut Vec<Stmt>>  = Some(&mut deferred);
+        let mut none: Option<&mut Vec<Stmt>> = None;
         for stmt in stmts {
-            self.emit_stmt(comptime, stmt)?;
+            self.emit_stmt(comptime, stmt, &mut opt)?;
+        }
+        for stmt in deferred.drain(..).rev() {
+            self.emit_stmt(comptime, stmt, &mut none);
         }
         self.pop_frame();
         Ok(())
@@ -623,7 +629,7 @@ impl Generator {
         }
     }
 
-    pub fn emit_stmt(&mut self, comptime: &mut Compiletime, stmt: Stmt) -> Result<()> {
+    pub fn emit_stmt(&mut self, comptime: &mut Compiletime, stmt: Stmt, deferred: &mut Option<&mut Vec<Stmt>>) -> Result<()> {
         match stmt {
             Stmt::Dbg(expr) => {
                 let val = self.emit_expr(comptime, expr, None)?;
@@ -679,12 +685,12 @@ impl Generator {
                 let i = self.ctx.label_cond();
                 genf!(self, "jnz %.s{}, @i{i}_body, @i{i}_else", (val.tag));
                 genf!(self, "@i{i}_body");
-                self.emit_stmt(comptime, *box_stmt)?;
+                self.emit_stmt(comptime, *box_stmt, deferred)?;
                 genf!(self, "jmp @i{i}_end");
                 genf!(self, "@i{i}_else");
 
                 if let Some(box_else_block) = opt_else {
-                    self.emit_stmt(comptime, *box_else_block)?;
+                    self.emit_stmt(comptime, *box_else_block, deferred)?;
                 }
 
                 genf!(self, "@i{i}_end");
@@ -700,7 +706,7 @@ impl Generator {
                 genf!(self, "jnz %.s{}, @p{p}_body, @p{p}_exit", (val.tag));
 
                 genf!(self, "@p{p}_body");
-                self.emit_stmt(comptime, *box_stmt)?;
+                self.emit_stmt(comptime, *box_stmt, deferred)?;
                 genf!(self, "jmp @p{p}_test");
                 
                 genf!(self, "@p{p}_exit");
@@ -749,6 +755,14 @@ impl Generator {
                 let s = self.ctx.stopper();
                 genf!(self, "@return_stopper{s}");
                 Ok(())
+            },
+            Stmt::Defer(loc, box_stmt) => {
+                if let Some(stmts) = deferred {
+                    stmts.push(*box_stmt);
+                    Ok(())
+                } else {
+                    Err(error!(loc, "Cannot defer here (did you try to nest them?)"))
+                }
             },
         }
     }

@@ -108,6 +108,7 @@ impl Decorator {
             Stmt::Return(_, _) => {
                 true
             },
+            Stmt::Defer(_, box_stmt) => { Self::rtc_stmt(box_stmt) },
         }
     }
 
@@ -198,6 +199,7 @@ impl Decorator {
                     Self::gav_expr(expr, addrvars);
                 }
             },
+            Stmt::Defer(_, box_stmt) => { Self::gav_stmt(box_stmt, addrvars) },
         }
     }
 }

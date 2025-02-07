@@ -93,6 +93,7 @@ pub enum Stmt {
     Break(Location),
     Continue(Location),
     Return(Location, Option<Expr>),
+    Defer(Location, Box<Stmt>),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
