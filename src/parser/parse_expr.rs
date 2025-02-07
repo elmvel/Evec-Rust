@@ -62,13 +62,13 @@ impl Parser {
                 Token::True(_) | Token::False(_) => Expr::Bool(token),
                 Token::Null(loc) => Expr::Null(Token::Null(loc)),
                 Token::WideOp(loc, ('.', '.')) => {
-                    // TODO: hardcoded for arrays only
-                    if self.lexer.peek() != Token::Op(ldef!(), ']') {
-                        let ((), r_bp) = prefix_binding_power(('.', '.').try_into()?)?;
-                        let rhs = self.parse_expr_bp(r_bp);
-                        Expr::UnOp(Token::WideOp(loc, ('.', '.')), ('.', '.').try_into()?, Box::new(rhs?), false)
-                    } else {
-                        Expr::Range(Token::WideOp(loc, ('.', '.')), None, None)
+                    match self.lexer.peek() {
+                        Token::Ident(_, _) | Token::Int(_, _) => {
+                            let ((), r_bp) = prefix_binding_power(('.', '.').try_into()?)?;
+                            let rhs = self.parse_expr_bp(r_bp);
+                            Expr::UnOp(Token::WideOp(loc, ('.', '.')), ('.', '.').try_into()?, Box::new(rhs?), false)
+                        },
+                        _ => Expr::Range(Token::WideOp(loc, ('.', '.')), None, None),
                     }
                 },
 
