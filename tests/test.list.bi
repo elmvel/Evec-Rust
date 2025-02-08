@@ -1,4 +1,4 @@
-:i count 42
+:i count 43
 :b shell 41
 ../target/debug/main ./dbg.eve && ./b.out
 :i returncode 0
@@ -537,6 +537,15 @@ Created executable b.out!
 Created executable b.out!
 32
 32
+
+:b stderr 0
+
+:b shell 43
+../target/debug/main ./usize.eve && ./b.out
+:i returncode 0
+:b stdout 29
+Created executable b.out!
+69
 
 :b stderr 0
 

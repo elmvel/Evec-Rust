@@ -40,3 +40,4 @@
 ../target/debug/main ./type_alias1.eve && ./b.out
 ../target/debug/main ./type_alias2_redef.eve && ./b.out
 ../target/debug/main ./strings.eve && ./b.out
+../target/debug/main ./usize.eve && ./b.out

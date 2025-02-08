@@ -56,6 +56,8 @@ impl Parser {
         self.type_alias_map.insert("str".into(), Type::wrap(TypeKind::U8.into(), StructKind::Slice, None, false));
         let u: Type = TypeKind::U8.into();
         self.type_alias_map.insert("cstr".into(), u.ptr());
+        let usz: Type = TypeKind::U64.into();
+        self.type_alias_map.insert("usize".into(), usz);
     }
 
     pub fn parse(&mut self, file_stem: String) -> Result<ParseModule> {
