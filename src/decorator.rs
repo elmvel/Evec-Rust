@@ -67,6 +67,8 @@ impl Decorator {
             Expr::Ident(_) => { () },
             Expr::Path(_, _) => { () },
             Expr::Number(_) => { () },
+            Expr::String(_) => { () },
+            Expr::CString(_) => { () },
             Expr::Bool(_) => { () },
             Expr::BinOp(_, _, _, _) => { () },
             Expr::UnOp(_, _, _, _) => { () },
@@ -151,6 +153,8 @@ impl Decorator {
             Expr::Ident(_) => { () },
             Expr::Path(_, _) => { () },
             Expr::Number(_) => { () },
+            Expr::String(_) => { () },
+            Expr::CString(_) => { () },
             Expr::Bool(_) => { () },
             Expr::BinOp(_, _, _, _) => { () },
             Expr::UnOp(_, _, _, _) => { () },
@@ -228,6 +232,8 @@ impl Decorator {
             Expr::Ident(_) => { () },
             Expr::Path(_, _) => { () },
             Expr::Number(_) => { () },
+            Expr::String(_) => { () },
+            Expr::CString(_) => { () },
             Expr::Bool(_) => { () },
             Expr::BinOp(_, _, box_lhs, box_rhs) => {
                 Self::gav_expr(box_lhs, addrvars);

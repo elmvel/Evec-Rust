@@ -59,6 +59,8 @@ impl Parser {
             match token {
                 Token::Ident(_, _) => Expr::Ident(token),
                 Token::Int(_, _) => Expr::Number(token),
+                Token::String(_, _) => Expr::String(token),
+                Token::CString(_, _) => Expr::CString(token),
                 Token::True(_) | Token::False(_) => Expr::Bool(token),
                 Token::Null(loc) => Expr::Null(Token::Null(loc)),
                 Token::WideOp(loc, ('.', '.')) => {

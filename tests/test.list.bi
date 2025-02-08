@@ -1,4 +1,4 @@
-:i count 41
+:i count 42
 :b shell 41
 ../target/debug/main ./dbg.eve && ./b.out
 :i returncode 0
@@ -529,4 +529,14 @@ Created executable b.out!
 
 :b stderr 70
 ./type_alias2_redef.eve:5:6: error: Type alias `str2` already exists!
+
+:b shell 45
+../target/debug/main ./strings.eve && ./b.out
+:i returncode 0
+:b stdout 32
+Created executable b.out!
+32
+32
+
+:b stderr 0
 

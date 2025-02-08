@@ -176,6 +176,8 @@ struct Generator {
     expected_type: Option<Type>,
     imports: HashSet<String>,
     expected_return: Type,
+    strings: Vec<String>,
+    cstrings: Vec<String>,
 }
 
 pub fn path_to_string(expr: Expr) -> String {
@@ -267,6 +269,8 @@ impl Generator {
             expected_type: None,
             imports: HashSet::new(),
             expected_return: TypeKind::Void.into(),
+            strings: Vec::new(),
+            cstrings: Vec::new(),
         };
         gen.generated_mod.name = name;
         gen
@@ -331,6 +335,29 @@ impl Generator {
         Ok(())
     }
 
+    fn emit_strings(&mut self) -> Result<()> {
+        let mut c = 0;
+        self.strings.reverse();
+        while !self.strings.is_empty() {
+            let string = self.strings.pop().unwrap(); 
+            genf!(self, "data $.str.data{c} = {{ b \"{string}\" }}");
+            genf!(self, "data $.str{c} = {{ l $.str.data{c}, l {} }}", (string.len()));
+            c += 1;
+        }
+        Ok(())
+    }
+
+    fn emit_c_strings(&mut self) -> Result<()> {
+        let mut c = 0;
+        self.cstrings.reverse();
+        while !self.cstrings.is_empty() {
+            let cstring = self.cstrings.pop().unwrap(); 
+            genf!(self, "data $.cstr{c} = {{ b \"{cstring}\", b 0 }}");
+            c += 1;
+        }
+        Ok(())
+    }
+
     pub fn emit(&mut self, comptime: &mut Compiletime) -> Result<()> {
         // TODO: set the name field of the gen module
         self.writeln("# QBE Start");
@@ -348,6 +375,9 @@ impl Generator {
             let global = self.decorated_mod.parse_module.globals.pop().unwrap();
             self.emit_global(comptime, global)?;
         }
+
+        self.emit_strings()?;
+        self.emit_c_strings()?;
         Ok(())
     }
 
@@ -829,6 +859,22 @@ impl Generator {
                 genf!(self, "%.s{tag} ={qtyp} copy {i}");
                 Ok(StackValue{ typ, tag })
             },
+            Expr::String(token) => {
+                let Token::String(_, text) = token else { unreachable!() };
+                let gtag = self.strings.len();
+                let tag = self.ctx.alloc(); // for local instance
+                genf!(self, "%.s{tag} =l copy $.str{gtag}");
+                self.strings.push(text);
+                Ok(StackValue{ tag, typ: self.decorated_mod.parse_module.type_alias_map.get("str").unwrap().clone() })
+            },
+            Expr::CString(token) => {
+                let Token::CString(_, text) = token else { unreachable!() };
+                let gtag = self.cstrings.len();
+                let tag = self.ctx.alloc(); // for local instance
+                genf!(self, "%.s{tag} =l copy $.cstr{gtag}");
+                self.cstrings.push(text);
+                Ok(StackValue{ tag, typ: self.decorated_mod.parse_module.type_alias_map.get("cstr").unwrap().clone() })
+            },
             Expr::BinOp(_, op, box_lhs, box_rhs) => {
                 match op {
                     Op::Add | Op::Sub | Op::Mul | Op::Div => {
@@ -1112,11 +1158,20 @@ impl Generator {
 
                         let bytes = self.ctx.alloc();
                         let ptr = self.ctx.alloc();
-                        let Some(ref inner) = lval.typ.inner else { unreachable!() };
-                        genf!(self, "%.s{bytes} =l mul %.s{rtag}, {}", (inner.sizeof()));
-                        genf!(self, "%.s{ptr} =l add %.s{base}, %.s{bytes}");
-                        let tag = self.load_type(inner, ptr, format!("%.s{ptr}"));
-                        Ok(StackValue{tag, typ: *inner.clone()})
+
+                        if lval.typ.is_ptr() {
+                            let deref = lval.typ.deref();
+                            genf!(self, "%.s{bytes} =l mul %.s{rtag}, {}", (deref.sizeof()));
+                            genf!(self, "%.s{ptr} =l add %.s{base}, %.s{bytes}");
+                            let tag = self.load_type(&deref, ptr, format!("%.s{ptr}"));
+                            Ok(StackValue{tag, typ: deref})
+                        } else {
+                            let Some(ref inner) = lval.typ.inner else { unreachable!() };
+                            genf!(self, "%.s{bytes} =l mul %.s{rtag}, {}", (inner.sizeof()));
+                            genf!(self, "%.s{ptr} =l add %.s{base}, %.s{bytes}");
+                            let tag = self.load_type(inner, ptr, format!("%.s{ptr}"));
+                            Ok(StackValue{tag, typ: *inner.clone()})
+                        }
                     },
                     _ => todo!()
                 }

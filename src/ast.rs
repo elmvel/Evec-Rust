@@ -104,6 +104,8 @@ pub enum Expr {
     Ident(Token), // foo
     Path(Token, Box<Expr>), // std::io => (String std) (::) (*Expr(io))
     Number(Token),
+    String(Token),
+    CString(Token),
     Bool(Token),
     BinOp(Token, Op, Box<Expr>, Box<Expr>),
     UnOp(Token, Op, Box<Expr>, bool), // bool stores prefix/postfix
@@ -120,6 +122,8 @@ impl Expr {
             Expr::Ident(t) => t.loc(),
             Expr::Path(t, _) => t.loc(),
             Expr::Number(t) => t.loc(),
+            Expr::String(t) => t.loc(),
+            Expr::CString(t) => t.loc(),
             Expr::Bool(t) => t.loc(),
             Expr::BinOp(t, _, _, _) => t.loc(),
             Expr::UnOp(t, _, _, _) => t.loc(),

@@ -9,6 +9,8 @@ pub enum Token {
     // Core
     Ident(Location, String),
     Int(Location, i64),
+    String(Location, String),
+    CString(Location, String),
     Op(Location, char),
     WideOp(Location, (char, char)),
     Dots(Location),
@@ -53,6 +55,8 @@ impl Token {
         match self {
             Token::Ident(loc, _) => loc.clone(),
             Token::Int(loc, _) => loc.clone(),
+            Token::String(loc, _) => loc.clone(),
+            Token::CString(loc, _) => loc.clone(),
             Token::Op(loc, _) => loc.clone(),
             Token::WideOp(loc, _) => loc.clone(),
             Token::Dots(loc) => loc.clone(),
@@ -172,6 +176,18 @@ impl Lexer {
                     .collect::<String>();
                 continue;
             }
+            if ch == 'c' && iter.peek().filter(|c| **c == '"').is_some() {
+                let q = iter.next();
+                let n: String = iter::once(q.unwrap())
+                    .chain(from_fn(|| iter.by_ref().next_if(|s| *s != '"')))
+                    .collect::<String>();
+                let text = &n[1..]; // skip first "
+                iter.next(); // skip last "
+                let loc = Location::new(input_path.into(), line, col);
+                col += text.len() + 1;
+                tokens.push(Token::CString(loc, text.into()));
+                continue;
+            }
             for wchar in WIDE_CHARS {
                 if ch == wchar.0 && iter.peek().filter(|c| **c == wchar.1).is_some() {
                     iter.next();
@@ -195,6 +211,16 @@ impl Lexer {
                 '<' | ',' | '&' => {
                         tokens.push(Token::Op(Location::new(input_path.into(), line, col), ch));
                         col += 1;
+                },
+                '"' => {
+                    let n: String = iter::once(ch)
+                        .chain(from_fn(|| iter.by_ref().next_if(|s| *s != '"')))
+                        .collect::<String>();
+                    let text = &n[1..]; // skip first "
+                    iter.next(); // skip last "
+                    let loc = Location::new(input_path.into(), line, col);
+                    col += text.len() + 1;
+                    tokens.push(Token::String(loc, text.into()));
                 },
                 'a'..='z' | 'A'..='Z' | '_' => {
                     let n: String = iter::once(ch)
