@@ -527,6 +527,6 @@ Created executable b.out!
 :i returncode 1
 :b stdout 0
 
-:b stderr 69
-./type_alias2_redef.eve:5:6: error: Type alias `str` already exists!
+:b stderr 70
+./type_alias2_redef.eve:5:6: error: Type alias `str2` already exists!
 

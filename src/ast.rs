@@ -395,7 +395,7 @@ impl fmt::Display for Type {
             TypeKind::S16 => write!(f, "s16"),
             TypeKind::S8 => write!(f, "s8"),
             TypeKind::Bool => write!(f, "bool"),
-            TypeKind::Unresolved => unreachable!(),
+            TypeKind::Unresolved => write!(f, "<unknown type alias>"),
             TypeKind::Structure => {
                 match self.struct_kind {
                     StructKind::Array => {

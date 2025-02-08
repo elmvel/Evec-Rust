@@ -1,16 +1,16 @@
 module hello;
 
-type str = []u8;
-type cstr = *u8;
+type str2 = []u8;
+type cstr2 = *u8;
 
 main :: fn() {
     let xs: [_]u8 = {69, 420};
-    let slc: str = xs[..];
+    let slc: str2 = xs[..];
     foo(slc);
     let x: u8 = 69;
-    let c: cstr = &x;
+    let c: cstr2 = &x;
 }
 
-foo :: fn(xs: str) {
+foo :: fn(xs: str2) {
     // nothing for now
 }

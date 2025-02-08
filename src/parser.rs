@@ -52,7 +52,14 @@ impl Parser {
         self.lexer.peek() == Token::Eof
     }
 
+    fn default_type_aliases(&mut self) {
+        self.type_alias_map.insert("str".into(), Type::wrap(TypeKind::U8.into(), StructKind::Slice, None, false));
+        let u: Type = TypeKind::U8.into();
+        self.type_alias_map.insert("cstr".into(), u.ptr());
+    }
+
     pub fn parse(&mut self, file_stem: String) -> Result<ParseModule> {
+        self.default_type_aliases();
         let Global::DeclModule(name) = self.parse_module_decl()? else { unreachable!() };
         let mut globals = Vec::new();
         

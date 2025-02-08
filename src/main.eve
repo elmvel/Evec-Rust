@@ -1,9 +1,5 @@
 module hello;
 
-type str = []u8;
-type cstr = *u8;
-type str = bool;
-
 main :: fn() {
     let xs: [_]u8 = {1, 2};
     let slc: str = xs[..];
