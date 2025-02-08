@@ -139,10 +139,14 @@ impl Parser {
             return Ok(None);
         }
 
-        let Expr::Ident(Token::Ident(_, text)) = self.parse_expr_ident()? else { unreachable!() };
+        let Expr::Ident(Token::Ident(loc, text)) = self.parse_expr_ident()? else { unreachable!() };
         self.expect(Token::Op(ldef!(), '='))?;
         let typ = self.parse_type()?;
         self.expect(Token::Op(ldef!(), ';'))?;
+
+        if self.type_alias_map.get(&text).is_some() {
+            return Err(error!(loc, "Type alias `{text}` already exists!"));
+        }
 
         self.type_alias_map.insert(text, typ);
         
