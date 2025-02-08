@@ -131,7 +131,7 @@ impl FunctionContext {
 #[derive(Debug, Default, Clone, PartialEq, Eq, Hash)]
 pub struct FunctionDecl {
     name: String, //TODO: remove when not needed
-    params: Vec<Param>,
+    pub params: Vec<Param>,
     ret_type: Option<Type>,
 }
 
@@ -497,6 +497,7 @@ impl Generator {
                     genf!(self, "%.void =w call $printf(l $fmt_bool, ..., w %.s{})", val);
                 },
                 TypeKind::Void => unreachable!(),
+                TypeKind::Unresolved => unreachable!(),
                 TypeKind::Structure => {
                     match val.typ.struct_kind {
                         StructKind::Array => {

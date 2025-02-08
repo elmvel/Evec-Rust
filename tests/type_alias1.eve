@@ -9,9 +9,8 @@ main :: fn() {
     foo(slc);
     let x: u8 = 69;
     let c: cstr = &x;
-    dbg c;
 }
 
 foo :: fn(xs: str) {
-    dbg xs;
+    // nothing for now
 }
