@@ -1,4 +1,4 @@
-:i count 39
+:i count 41
 :b shell 41
 ../target/debug/main ./dbg.eve && ./b.out
 :i returncode 0
@@ -513,4 +513,20 @@ Created executable b.out!
 
 :b stderr 77
 ./defer_defer.eve:4:11: error: Cannot defer here (did you try to nest them?)
+
+:b shell 49
+../target/debug/main ./type_alias1.eve && ./b.out
+:i returncode 0
+:b stdout 26
+Created executable b.out!
+
+:b stderr 0
+
+:b shell 55
+../target/debug/main ./type_alias2_redef.eve && ./b.out
+:i returncode 1
+:b stdout 0
+
+:b stderr 69
+./type_alias2_redef.eve:5:6: error: Type alias `str` already exists!
 

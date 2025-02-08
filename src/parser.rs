@@ -17,11 +17,13 @@ pub struct ParseModule {
     pub file_stem: String,
     pub globals: Vec<Global>,
     pub function_map: HashMap<String, FunctionDecl>,
+    pub type_alias_map: HashMap<String, Type>,
 }
 
 pub struct Parser {
     lexer: Lexer,
     function_map: HashMap<String, FunctionDecl>,
+    type_alias_map: HashMap<String, Type>,
 }
 
 // Welcome home :/
@@ -32,7 +34,7 @@ pub struct Parser {
 // between types
 impl Parser {
     pub fn from(lexer: Lexer) -> Self {
-        Self { lexer, function_map: HashMap::new() }
+        Self { lexer, function_map: HashMap::new(), type_alias_map: HashMap::new() }
     }
 
     fn expect(&mut self, token: Token) -> Result<()> {
@@ -58,12 +60,22 @@ impl Parser {
             if let Some(import) = self.parse_import()? {
                 globals.push(import);
             } else {
-                let global = self.parse_global()?;
-                globals.push(global);
+                if let Some(_) = self.parse_type_alias()? {
+                    continue;
+                } else {
+                    let global = self.parse_global()?;
+                    globals.push(global);
+                }
             }
         }
 
-        Ok(ParseModule{name, file_stem, globals, function_map: self.function_map.clone()})
+        Ok(ParseModule{
+            name,
+            file_stem,
+            globals,
+            function_map: self.function_map.clone(),
+            type_alias_map: self.type_alias_map.clone()}
+        )
     }
 
     pub fn parse_expr_ident(&mut self) -> Result<Expr> {
@@ -117,6 +129,28 @@ impl Parser {
         let import = Global::Import(self.parse_expr_path()?);
         self.expect(Token::Op(ldef!(), ';'))?;
         Ok(Some(import))
+    }
+
+    /*
+    <global.typealias> ::= 'type' ID '=' <type> ';'
+    */
+    pub fn parse_type_alias(&mut self) -> Result<Option<()>> {
+        if !self.lexer.eat(Token::Type(ldef!())) {
+            return Ok(None);
+        }
+
+        let Expr::Ident(Token::Ident(loc, text)) = self.parse_expr_ident()? else { unreachable!() };
+        self.expect(Token::Op(ldef!(), '='))?;
+        let typ = self.parse_type()?;
+        self.expect(Token::Op(ldef!(), ';'))?;
+
+        if self.type_alias_map.get(&text).is_some() {
+            return Err(error!(loc, "Type alias `{text}` already exists!"));
+        }
+
+        self.type_alias_map.insert(text, typ);
+        
+        Ok(Some(()))
     }
 
     /*

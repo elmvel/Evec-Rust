@@ -1,4 +1,4 @@
-use std::collections::HashSet;
+use std::collections::{HashSet, HashMap};
 
 use crate::lexer::Token;
 use crate::parser::ParseModule;
@@ -33,6 +33,101 @@ impl Decorator {
         let addressed_vars = self.get_addressed_variables();
         self.decorated_mod.addressed_vars = addressed_vars;
         self.return_check();
+        self.resolve_type_aliases();
+    }
+
+    // rta
+    pub fn resolve_type_aliases(&mut self) {
+        for global in self.decorated_mod.parse_module.globals.iter_mut() {
+            Self::rta_global(global, &self.decorated_mod.parse_module.type_alias_map);
+        }
+        let alias_map = &mut self.decorated_mod.parse_module.type_alias_map;
+        for (_, decl) in self.decorated_mod.parse_module.function_map.iter_mut() {
+            for param in decl.params.iter_mut() {
+                if param.1.kind == TypeKind::Unresolved {
+                    if let Some(typ) = alias_map.get(param.1.alias.as_ref().unwrap()) {
+                        param.1 = typ.clone();
+                    }
+                }
+            }
+        }
+    }
+
+    pub fn rta_global(global: &mut Global, alias_map: &HashMap<String, Type>) {
+        match global {
+            Global::Decl(_, ref mut expr) => {
+                Self::rta_expr(expr, alias_map);
+            },
+            _ => (),
+        }
+    }
+
+    pub fn rta_expr(expr: &mut Expr, alias_map: &HashMap<String, Type>) -> () {
+        match expr {
+            Expr::Ident(_) => { () },
+            Expr::Path(_, _) => { () },
+            Expr::Number(_) => { () },
+            Expr::Bool(_) => { () },
+            Expr::BinOp(_, _, _, _) => { () },
+            Expr::UnOp(_, _, _, _) => { () },
+            Expr::Func(_, ref mut params, ref mut ret_type, stmts, _) => {
+                for param in params.iter_mut() {
+                    if param.1.kind == TypeKind::Unresolved {
+                        if let Some(typ) = alias_map.get(param.1.alias.as_ref().unwrap()) {
+                            param.1 = typ.clone();
+                        }
+                    }
+                }
+                if let Some(ref mut rt) = ret_type {
+                    if rt.kind == TypeKind::Unresolved {
+                        if let Some(typ) = alias_map.get(rt.alias.as_ref().unwrap()) {
+                            *rt = typ.clone();
+                        }
+                    }
+                }
+                for stmt in stmts.iter_mut() {
+                    Self::rta_stmt(stmt, alias_map);
+                }
+            },
+            Expr::Call(_, _) => { () },
+            Expr::Null(_) => { () },
+            Expr::InitList(_, _) => { () },
+            Expr::Range(_, _, _) => { () },
+        }
+    }
+
+    pub fn rta_stmt(stmt: &mut Stmt, alias_map: &HashMap<String, Type>) -> () {
+        match stmt {
+            Stmt::Dbg(_) => { () },
+            Stmt::Let(_, ref mut typ, _) => {
+                if let Some(ref mut rt) = typ {
+                    if rt.kind == TypeKind::Unresolved {
+                        if let Some(typ2) = alias_map.get(rt.alias.as_ref().unwrap()) {
+                            *rt = typ2.clone();
+                        }
+                    }
+                }
+            },
+            Stmt::Scope(stmts) => {
+                for stmt in stmts {
+                    Self::rta_stmt(stmt, alias_map);
+                }
+            },
+            Stmt::Ex(_) => { () },
+            Stmt::If(_, box_stmt, opt) => {
+                Self::rta_stmt(box_stmt, alias_map);
+                if let Some(box_else_block) = opt {
+                    Self::rta_stmt(box_else_block, alias_map);
+                }
+            },
+            Stmt::While(_, box_stmt) => {
+                Self::rta_stmt(box_stmt, alias_map);
+            },
+            Stmt::Break(_) => { () },
+            Stmt::Continue(_) => { () },
+            Stmt::Return(_, _) => { () },
+            Stmt::Defer(_, box_stmt) => { Self::rta_stmt(box_stmt, alias_map); },
+        }
     }
 
     // rtc

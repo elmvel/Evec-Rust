@@ -141,6 +141,7 @@ pub struct Type {
     pub elements: usize, // Compile time only
     pub infer_elements: bool,
     pub inner: Option<Box<Type>>,
+    pub alias: Option<String>,
 }
 
 impl Into<Type> for TypeKind {
@@ -152,6 +153,7 @@ impl Into<Type> for TypeKind {
             elements: 0,
             infer_elements: false,
             inner: None,
+            alias: None,
         }
     }
 }
@@ -159,6 +161,7 @@ impl Into<Type> for TypeKind {
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 #[repr(u8)]
 pub enum TypeKind {
+    Unresolved,
     Void,
     U64,
     U32,
@@ -189,7 +192,14 @@ impl Type {
             elements: elements.unwrap_or(0),
             infer_elements,
             inner: Some(Box::new(typ)),
+            alias: None,
         }
+    }
+
+    pub fn alias(name: String) -> Self {
+        let mut typ: Type = TypeKind::Unresolved.into();
+        typ.alias = Some(name);
+        typ
     }
 
     pub fn is_struct(&self) -> bool {
@@ -208,6 +218,7 @@ impl Type {
             elements: self.elements,
             infer_elements: self.infer_elements,
             inner: self.inner.clone(),
+            alias: self.alias.clone(),
         }
     }
 
@@ -219,6 +230,7 @@ impl Type {
             elements: self.elements,
             infer_elements: self.infer_elements,
             inner: self.inner.clone(),
+            alias: self.alias.clone(),
         }
     }
     
@@ -232,6 +244,7 @@ impl Type {
             TypeKind::S64 => "l",
             TypeKind::S32 | TypeKind::S16 | TypeKind::S8 => "w",
             TypeKind::Void | TypeKind::Bool => "w",
+            TypeKind::Unresolved => unreachable!(),
             TypeKind::Structure => {
                 match self.struct_kind {
                     StructKind::Array => {
@@ -269,6 +282,7 @@ impl Type {
             TypeKind::U8  => "ub",
             TypeKind::S8  => "sb",
             TypeKind::Void | TypeKind::Bool => "w",
+            TypeKind::Unresolved => unreachable!(),
             TypeKind::Structure => {
                 match self.struct_kind {
                     StructKind::Array => {
@@ -294,6 +308,7 @@ impl Type {
             TypeKind::U8  | TypeKind::S8 => 1,
             TypeKind::Bool => 4,
             TypeKind::Void => 0,
+            TypeKind::Unresolved => unreachable!(),
             TypeKind::Structure => {
                 match self.struct_kind {
                     StructKind::Array => {
@@ -380,6 +395,7 @@ impl fmt::Display for Type {
             TypeKind::S16 => write!(f, "s16"),
             TypeKind::S8 => write!(f, "s8"),
             TypeKind::Bool => write!(f, "bool"),
+            TypeKind::Unresolved => unreachable!(),
             TypeKind::Structure => {
                 match self.struct_kind {
                     StructKind::Array => {
