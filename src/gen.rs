@@ -491,7 +491,8 @@ impl Generator {
                 },
                 TypeKind::U32 | TypeKind::U16 | TypeKind::U8 |
                 TypeKind::S32 | TypeKind::S16 | TypeKind::S8 => {
-                    genf!(self, "%.void =w call $printf(l $fmt_d, ..., w %.s{})", val);
+                    let tag = self.extend_to_long(val.tag, &val.typ);
+                    genf!(self, "%.void =w call $printf(l $fmt_d, ..., w %.s{})", tag);
                 },
                 TypeKind::Bool => {
                     genf!(self, "%.void =w call $printf(l $fmt_bool, ..., w %.s{})", val);

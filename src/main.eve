@@ -4,14 +4,14 @@ type str = []u8;
 type cstr = *u8;
 
 main :: fn() {
-    let xs: [_]u8 = {69, 420};
+    let xs: [_]u8 = {1, 2};
     let slc: str = xs[..];
-    foo(slc);
+    foo(xs[..]);
     let x: u8 = 69;
     let c: cstr = &x;
     dbg c;
 }
 
-foo :: fn(xs: str) {
-    dbg xs;
+foo :: fn(xs: []u8) {
+    dbg xs[1];
 }
