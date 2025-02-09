@@ -109,7 +109,8 @@ pub enum Expr {
     Bool(Token),
     BinOp(Token, Op, Box<Expr>, Box<Expr>),
     UnOp(Token, Op, Box<Expr>, bool), // bool stores prefix/postfix
-    Func(Token, Vec<Param>, Option<Type>, Vec<Stmt>, bool), // Eventually Func(Token, Vec<Param>, RetType, Vec<Stmt>)
+    Func(Token, Vec<Param>, Option<Type>, Vec<Stmt>, bool),
+    FuncDecl(Token, Vec<Param>, Option<Type>),
     Call(Box<Expr>, Vec<Expr>), // TODO: add parameters
     Null(Token),
     InitList(Token, Vec<Expr>), // First token is just for easy location
@@ -128,6 +129,7 @@ impl Expr {
             Expr::BinOp(t, _, _, _) => t.loc(),
             Expr::UnOp(t, _, _, _) => t.loc(),
             Expr::Func(t, _, _, _, _) => t.loc(),
+            Expr::FuncDecl(t, _, _) => t.loc(),
             Expr::Call(t, _) => t.loc(),
             Expr::Null(t) => t.loc(),
             Expr::InitList(t, _) => t.loc(),

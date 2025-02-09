@@ -175,7 +175,13 @@ impl Parser {
             self.function_map.insert(text.clone(), FunctionDecl::new(params.clone(), ret_type.clone(), text));
             Ok(Global::Decl(token, Expr::Func(fn_, params, ret_type, stmts, returns)))
         } else {
-            Ok(Global::Decl(token, expr))
+            if let Expr::FuncDecl(fn_, params, ret_type) = expr {
+                let Token::Ident(_, text) = token.clone() else { unreachable!() };
+                self.function_map.insert(text.clone(), FunctionDecl::new(params.clone(), ret_type.clone(), text));
+                Ok(Global::Decl(token, Expr::FuncDecl(fn_, params, ret_type)))
+            } else {
+                Ok(Global::Decl(token, expr))
+            }
         }
     }
 }

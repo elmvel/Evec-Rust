@@ -91,6 +91,7 @@ impl Decorator {
                     Self::rta_stmt(stmt, alias_map);
                 }
             },
+            Expr::FuncDecl(_, _, _) => { () },
             Expr::Call(_, _) => { () },
             Expr::Null(_) => { () },
             Expr::InitList(_, _) => { () },
@@ -167,6 +168,7 @@ impl Decorator {
                 }
                 *ret = returns;
             },
+            Expr::FuncDecl(_, _, _) => { () },
             Expr::Call(_, _) => { () },
             Expr::Null(_) => { () },
             Expr::InitList(_, _) => { () },
@@ -251,6 +253,7 @@ impl Decorator {
                     Self::gav_stmt(stmt, addrvars);
                 }
             },
+            Expr::FuncDecl(_, _, _) => { () },
             Expr::Call(name, args) => {
                 for expr in args {
                     Self::gav_expr(expr, addrvars);

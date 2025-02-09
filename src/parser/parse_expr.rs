@@ -105,11 +105,16 @@ impl Parser {
                         Some(self.parse_type()?)
                     } else { None };
 
-                    if self.lexer.peek() != Token::Op(ldef!(), '{') {
-                        return Err(error!(loc, "Missing function body"));
+                    if self.lexer.peek() == Token::Op(ldef!(), ';') {
+                        self.lexer.next();
+                        Expr::FuncDecl(Token::Fn(loc), params, return_type)
+                    } else {
+                        if self.lexer.peek() != Token::Op(ldef!(), '{') {
+                            return Err(error!(loc, "Missing function body"));
+                        }
+                        let stmts = self.parse_stmts()?;
+                        Expr::Func(Token::Fn(loc), params, return_type, stmts, false)
                     }
-                    let stmts = self.parse_stmts()?;
-                    Expr::Func(Token::Fn(loc), params, return_type, stmts, false)
                 },
                 Token::Eof => Err(error_orphan!("Could not parse expr term from end-of-file"))?,
                 t => Err(error!(t.loc(), "Could not parse expr term from {t:?}"))?,
