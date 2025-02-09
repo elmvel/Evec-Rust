@@ -41,3 +41,4 @@
 ../target/debug/main ./type_alias2_redef.eve && ./b.out
 ../target/debug/main ./strings.eve && ./b.out
 ../target/debug/main ./usize.eve && ./b.out
+../target/debug/main ./slice_methods.eve && ./b.out

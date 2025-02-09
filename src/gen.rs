@@ -145,6 +145,7 @@ impl FunctionDecl {
 
 pub struct Compiletime {
     module_map: HashMap<String, Module>,
+    method_map: HashMap<Type, HashMap<String, FunctionDecl>>,
     main_defined: bool,
 }
 
@@ -335,6 +336,46 @@ impl Generator {
         Ok(())
     }
 
+    fn emit_builtin_methods(&mut self, comptime: &mut Compiletime) -> Result<()> {
+        genf!(
+            self,
+r#"
+function l $.slice.ptr(l %slc) {{
+@start
+    %p =l loadl %slc
+    ret %p
+}}
+
+function l $.slice.len(l %slc) {{
+@start
+    %off =l add %slc, 8
+    %sz =l loadl %off
+    ret %sz
+}}
+"#
+        );
+
+        let mut map = HashMap::new();
+        let ptr_typ: Type = Into::<Type>::into(TypeKind::Void).ptr();
+        map.insert("ptr".into(), FunctionDecl::new(vec![], Some(ptr_typ), "ptr".into()));
+        map.insert("len".into(), FunctionDecl::new(vec![], Some(TypeKind::U64.into()), "len".into()));
+        comptime.method_map.insert(Type::wrap(TypeKind::Void.into(), StructKind::Slice, None, false), map);
+        Ok(())
+    }
+
+    // This is necessary for built-ins, which may vary slightly but share the same structure
+    // Currently this only applies to slices
+    fn type_to_builtin_check(typ: &Type) -> Type {
+        if typ.is_struct() {
+            match typ.struct_kind {
+                StructKind::Slice => Type::wrap(TypeKind::Void.into(), StructKind::Slice, None, false),
+                _ => typ.clone()
+            }
+        } else {
+            return typ.clone();
+        }
+    }
+
     fn emit_strings(&mut self) -> Result<()> {
         let mut c = 0;
         self.strings.reverse();
@@ -369,6 +410,7 @@ impl Generator {
         genf!(self, "data $fmt_arr_end = {{ b \"}}\\n\", b 0 }}");
 
         self.emit_types(comptime)?;
+        self.emit_builtin_methods(comptime)?;
         
         self.decorated_mod.parse_module.globals.reverse();
         while !self.decorated_mod.parse_module.globals.is_empty() {
@@ -1173,6 +1215,39 @@ impl Generator {
                             Ok(StackValue{tag, typ: *inner.clone()})
                         }
                     },
+                    Op::Dot => {
+                        let lloc = box_lhs.loc();
+                        let rloc = box_rhs.loc();
+                        
+                        let lval = self.emit_expr(comptime, *box_lhs, None)?;
+                        let Expr::Call(box_expr, _) = *box_rhs else {
+                            return Err(error!(rloc, "Rhs of . operator does not look like a method call"));
+                        };
+                        let Expr::Ident(Token::Ident(loc, text)) = *box_expr else {
+                            return Err(error!(rloc, "Rhs of . operator does not look like a method call"));
+                        };
+                        if let Some(mtd_map) = comptime.method_map.get(&Generator::type_to_builtin_check(&lval.typ)) {
+                            if let Some(decl) = mtd_map.get(&text) {
+                                if lval.typ.is_struct() {
+                                    match lval.typ.struct_kind {
+                                        StructKind::Slice => {
+                                            // Built in
+                                            let tag = self.ctx.alloc();
+                                            genf!(self, "%.s{tag} =l call $.slice.{}(l %.s{})", text, lval);
+                                            Ok(StackValue{tag, typ: decl.ret_type.clone().unwrap_or(TypeKind::Void.into())})
+                                        },
+                                        _ => todo!()
+                                    }
+                                } else {
+                                    todo!()
+                                }
+                            } else {
+                                return Err(error!(loc, "No method `{}` found on type {}", text, (lval.typ)));
+                            }
+                        } else {
+                            Err(error!(lloc, "No methods exist for type {}", (lval.typ)))
+                        }
+                    },
                     _ => todo!()
                 }
             },
@@ -1341,6 +1416,7 @@ impl Compiletime {
     pub fn new() -> Self {
         Self {
             module_map: HashMap::new(),
+            method_map: HashMap::new(),
             main_defined: false,
         }
     }
