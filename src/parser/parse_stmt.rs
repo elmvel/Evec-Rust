@@ -218,7 +218,7 @@ impl Parser {
         } else { None };
         
         self.expect(Token::Op(ldef!(), ';'))?;
-        Ok(Some(Stmt::Return(loc, expr)))
+        Ok(Some(Stmt::Return(loc, expr, false, true)))
     }
 
     pub fn parse_stmt_defer(&mut self) -> Result<Option<Stmt>> {

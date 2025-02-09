@@ -127,7 +127,7 @@ impl Decorator {
             },
             Stmt::Break(_) => { () },
             Stmt::Continue(_) => { () },
-            Stmt::Return(_, _) => { () },
+            Stmt::Return(_, _, _, _) => { () },
             Stmt::Defer(_, box_stmt) => { Self::rta_stmt(box_stmt, alias_map); },
         }
     }
@@ -204,7 +204,7 @@ impl Decorator {
             Stmt::While(_, _) => { false },
             Stmt::Break(_) => { false },
             Stmt::Continue(_) => { false },
-            Stmt::Return(_, _) => {
+            Stmt::Return(_, _, _, _) => {
                 true
             },
             Stmt::Defer(_, box_stmt) => { Self::rtc_stmt(box_stmt) },
@@ -295,7 +295,7 @@ impl Decorator {
             },
             Stmt::Break(_) => { () },
             Stmt::Continue(_) => { () },
-            Stmt::Return(_, opt) => {
+            Stmt::Return(_, opt, _, _) => {
                 if let Some(expr) = opt {
                     Self::gav_expr(expr, addrvars);
                 }

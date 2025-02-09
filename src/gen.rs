@@ -451,7 +451,7 @@ function l $.slice.len(l %slc) {{
         }
     }
 
-    pub fn emit_function(&mut self, comptime: &mut Compiletime, params: Vec<Param>, ret_type: Option<Type>, name: Token, stmts: Vec<Stmt>) -> Result<()> {
+    pub fn emit_function(&mut self, comptime: &mut Compiletime, params: Vec<Param>, ret_type: Option<Type>, name: Token, mut stmts: Vec<Stmt>) -> Result<()> {
         let Token::Ident(loc, text) = name else {
             unreachable!("must have an ident here")
         };
@@ -486,6 +486,14 @@ function l $.slice.len(l %slc) {{
             genf!(self, ") {{\n@start");
             comptime.main_defined = true;
             setting_main = true;
+
+            // Hack 2
+            for stmt in &mut stmts {
+                match stmt {
+                    Stmt::Return(_, _, ref mut is_main, _) => *is_main = true,
+                    _ => ()
+                }
+            }
         } else {
             gen!(self, "export function {qbe_return_type} ${}.{text}(", (self.generated_mod.name));
             let mut hack = 0;
@@ -512,13 +520,15 @@ function l $.slice.len(l %slc) {{
             prelude.symtab_store(text, StackValue{tag, typ});
         }
         
-        self.emit_stmts(comptime, stmts, Some(prelude))?;
         
-        if ret_type.is_some() || setting_main {
-            genf!(self, "ret 0");
-        } else {
-            genf!(self, "ret");
+        if ret_type.is_none() {
+            stmts.push(Stmt::Return(ldef!(), None, setting_main, false));
         }
+        self.emit_stmts(comptime, stmts, Some(prelude))?;
+        if ret_type.is_some() {
+            genf!(self, "ret 0");
+        }
+        
         genf!(self, "}}");
         self.expected_return = TypeKind::Void.into();
         Ok(())
@@ -531,13 +541,16 @@ function l $.slice.len(l %slc) {{
             None => self.push_frame(),
         }
         let mut deferred = Vec::new();
-        let mut opt: Option<&mut Vec<Stmt>>  = Some(&mut deferred);
         let mut none: Option<&mut Vec<Stmt>> = None;
         for stmt in stmts {
+            if let Stmt::Return(_, _, _, _) = stmt {
+                let mut copied = deferred.clone();
+                for stmt in copied.drain(..).rev() {
+                    self.emit_stmt(comptime, stmt, &mut none)?;
+                }
+            }
+            let mut opt: Option<&mut Vec<Stmt>>  = Some(&mut deferred);
             self.emit_stmt(comptime, stmt, &mut opt)?;
-        }
-        for stmt in deferred.drain(..).rev() {
-            self.emit_stmt(comptime, stmt, &mut none)?;
         }
         self.pop_frame();
         Ok(())
@@ -813,7 +826,7 @@ function l $.slice.len(l %slc) {{
                 genf!(self, "@p{p}_stopper{s}");
                 Ok(())
             },
-            Stmt::Return(loc, opt) => {
+            Stmt::Return(loc, opt, setting_main, use_stopper) => {
                 if let Some(expr) = opt {
                     let val = self.emit_expr(comptime, expr, None)?;
                     if self.expected_return != val.typ {
@@ -825,10 +838,17 @@ function l $.slice.len(l %slc) {{
                         let void: Type = TypeKind::Void.into();
                         return Err(error!(loc, "Expected to return {}, but got {} instead", (self.expected_return), (void)));
                     }
-                    genf!(self, "ret");
+                    // stupid dumb dirty annoying hack ty qbe
+                    if setting_main {
+                        genf!(self, "ret 0");
+                    } else {
+                        genf!(self, "ret");
+                    }
                 }
-                let s = self.ctx.stopper();
-                genf!(self, "@return_stopper{s}");
+                if use_stopper {
+                    let s = self.ctx.stopper();
+                    genf!(self, "@return_stopper{s}");
+                }
                 Ok(())
             },
             Stmt::Defer(loc, box_stmt) => {

@@ -92,7 +92,7 @@ pub enum Stmt {
     While(Expr, Box<Stmt>),
     Break(Location),
     Continue(Location),
-    Return(Location, Option<Expr>),
+    Return(Location, Option<Expr>, bool, bool), // bools are ugly hacks
     Defer(Location, Box<Stmt>),
 }
 

@@ -462,13 +462,12 @@ Created executable b.out!
 :b shell 43
 ../target/debug/main ./defer.eve && ./b.out
 :i returncode 0
-:b stdout 37
+:b stdout 34
 Created executable b.out!
 4
 1
 2
 3
-69
 
 :b stderr 0
 
