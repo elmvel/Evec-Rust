@@ -356,10 +356,24 @@ function l $.slice.len(l %slc) {{
         );
 
         let mut map = HashMap::new();
-        map.insert("ptr".into(), FunctionDecl::new(vec![], Some(TypeKind::U64.into()), "ptr".into()));
+        let ptr_typ: Type = Into::<Type>::into(TypeKind::Void).ptr();
+        map.insert("ptr".into(), FunctionDecl::new(vec![], Some(ptr_typ), "ptr".into()));
         map.insert("len".into(), FunctionDecl::new(vec![], Some(TypeKind::U64.into()), "len".into()));
-        comptime.method_map.insert(Type::wrap(TypeKind::U8.into(), StructKind::Slice, None, false), map);
+        comptime.method_map.insert(Type::wrap(TypeKind::Void.into(), StructKind::Slice, None, false), map);
         Ok(())
+    }
+
+    // This is necessary for built-ins, which may vary slightly but share the same structure
+    // Currently this only applies to slices
+    fn type_to_builtin_check(typ: &Type) -> Type {
+        if typ.is_struct() {
+            match typ.struct_kind {
+                StructKind::Slice => Type::wrap(TypeKind::Void.into(), StructKind::Slice, None, false),
+                _ => typ.clone()
+            }
+        } else {
+            return typ.clone();
+        }
     }
 
     fn emit_strings(&mut self) -> Result<()> {
@@ -1212,7 +1226,7 @@ function l $.slice.len(l %slc) {{
                         let Expr::Ident(Token::Ident(loc, text)) = *box_expr else {
                             return Err(error!(rloc, "Rhs of . operator does not look like a method call"));
                         };
-                        if let Some(mtd_map) = comptime.method_map.get(&lval.typ) {
+                        if let Some(mtd_map) = comptime.method_map.get(&Generator::type_to_builtin_check(&lval.typ)) {
                             if let Some(decl) = mtd_map.get(&text) {
                                 if lval.typ.is_struct() {
                                     match lval.typ.struct_kind {
@@ -1220,7 +1234,7 @@ function l $.slice.len(l %slc) {{
                                             // Built in
                                             let tag = self.ctx.alloc();
                                             genf!(self, "%.s{tag} =l call $.slice.{}(l %.s{})", text, lval);
-                                            Ok(StackValue{tag, typ: TypeKind::U64.into()})
+                                            Ok(StackValue{tag, typ: decl.ret_type.clone().unwrap_or(TypeKind::Void.into())})
                                         },
                                         _ => todo!()
                                     }

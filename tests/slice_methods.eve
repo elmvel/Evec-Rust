@@ -2,6 +2,9 @@ module hello;
 
 main :: fn() {
     let x: [_]s32 = {1, 2};
-    dbg x[..].ptr();
+    //dbg x[..].ptr();
     dbg x[..].len();
+
+    let s: str = "hello";
+    dbg s.len();
 }
