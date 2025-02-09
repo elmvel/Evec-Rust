@@ -1,12 +1,6 @@
 module hello;
 
 main :: fn() {
-    let x: str = "hello world";
-    dbg x[5];
-
-    let c: cstr = c"hello world";
-    dbg c[5];
-
-    let y: usize = 69;
-    dbg y;
+    let x: str = "aa";
+    dbg x.ptr();
 }

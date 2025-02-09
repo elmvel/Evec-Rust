@@ -4,7 +4,7 @@ use core::iter::from_fn;
 
 use crate::errors::SyntaxError;
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Default, Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Token {
     // Core
     Ident(Location, String),
@@ -47,6 +47,7 @@ pub enum Token {
     True(Location),
     False(Location),
     
+    #[default]
     Eof,
 }
 
