@@ -42,3 +42,4 @@
 ../target/debug/main ./strings.eve && ./b.out
 ../target/debug/main ./usize.eve && ./b.out
 ../target/debug/main ./slice_methods.eve && ./b.out
+../target/debug/main ./struct_pointer.eve && ./b.out

@@ -1,4 +1,4 @@
-:i count 44
+:i count 45
 :b shell 41
 ../target/debug/main ./dbg.eve && ./b.out
 :i returncode 0
@@ -555,6 +555,15 @@ Created executable b.out!
 Created executable b.out!
 2
 5
+
+:b stderr 0
+
+:b shell 52
+../target/debug/main ./struct_pointer.eve && ./b.out
+:i returncode 0
+:b stdout 28
+Created executable b.out!
+3
 
 :b stderr 0
 

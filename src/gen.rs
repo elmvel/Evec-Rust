@@ -633,6 +633,11 @@ function l $.slice.len(l %slc) {{
                     // }
                     tag
                 },
+                StructKind::Slice => {
+                    let tag = self.ctx.alloc();
+                    genf!(self, "%.s{tag} ={qtype} copy {from_fmt}"); 
+                    tag
+                },
                 _ => todo!()
             }
         } else {
@@ -658,6 +663,10 @@ function l $.slice.len(l %slc) {{
                     let Some(ref inner) = typ.inner else { unreachable!() };
                     //let tag = self.ctx.alloc();
                     let bytes = typ.elements * inner.sizeof();
+                    genf!(self, "blit %.s{from_tag}, {to_fmt}, {bytes}");
+                },
+                StructKind::Slice => {
+                    let bytes = typ.sizeof();
                     genf!(self, "blit %.s{from_tag}, {to_fmt}, {bytes}");
                 },
                 _ => todo!()
