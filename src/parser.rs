@@ -10,6 +10,22 @@ use crate::gen::FunctionDecl;
 mod parse_expr;
 mod parse_stmt;
 
+macro_rules! insert_func_with_attributes {
+    ($map:expr, $name:expr, $params:expr, $ret_type:expr, $attrs:expr) => {
+        let mut extern_name = None;
+        for attr in $attrs {
+            match attr {
+                Attribute::Extern(expr) => {
+                    let Expr::String(Token::String(_, text)) = expr else { unreachable!() };
+                    extern_name = Some(text);
+                },
+                _ => return Err(error_orphan!("Unsupported function attribute `{attr:?}`")),
+            }
+        }
+        $map.insert($name.clone(), FunctionDecl::new($params, $ret_type, $name, extern_name));
+    }
+}
+
 pub type Result<T> = std::result::Result<T, SyntaxError>;
 
 pub struct ParseModule {
@@ -85,6 +101,18 @@ impl Parser {
             function_map: self.function_map.clone(),
             type_alias_map: self.type_alias_map.clone()}
         )
+    }
+
+    pub fn parse_expr_string(&mut self) -> Result<Expr> {
+        let token = self.lexer.peek();
+        match token {
+            Token::String(_, _) => {
+                self.lexer.next();
+                Ok(Expr::String(token))
+            },
+            Token::Eof => Err(error_orphan!("No string present")),
+            t => Err(error!(t.loc(), "No string present")),
+        }
     }
 
     pub fn parse_expr_ident(&mut self) -> Result<Expr> {
@@ -170,18 +198,37 @@ impl Parser {
         self.expect(Token::WideOp(ldef!(), (':', ':')))?;
         let expr = self.parse_expr()?;
         
-        if let Expr::Func(fn_, params, ret_type, stmts, returns) = expr {
+        if let Expr::Func(fn_, params, ret_type, stmts, returns, attrs) = expr {
             let Token::Ident(_, text) = token.clone() else { unreachable!() };
-            self.function_map.insert(text.clone(), FunctionDecl::new(params.clone(), ret_type.clone(), text));
-            Ok(Global::Decl(token, Expr::Func(fn_, params, ret_type, stmts, returns)))
+            insert_func_with_attributes!((self.function_map), text, (params.clone()), (ret_type.clone()), (attrs.clone()));
+            Ok(Global::Decl(token, Expr::Func(fn_, params, ret_type, stmts, returns, attrs)))
         } else {
-            if let Expr::FuncDecl(fn_, params, ret_type) = expr {
+            if let Expr::FuncDecl(fn_, params, ret_type, attrs) = expr {
                 let Token::Ident(_, text) = token.clone() else { unreachable!() };
-                self.function_map.insert(text.clone(), FunctionDecl::new(params.clone(), ret_type.clone(), text));
-                Ok(Global::Decl(token, Expr::FuncDecl(fn_, params, ret_type)))
+                insert_func_with_attributes!((self.function_map), text, (params.clone()), (ret_type.clone()), (attrs.clone()));
+                Ok(Global::Decl(token, Expr::FuncDecl(fn_, params, ret_type, attrs)))
             } else {
                 Ok(Global::Decl(token, expr))
             }
+        }
+    }
+
+    /*
+    #extern("symbol")
+    */
+    pub fn parse_attribute(&mut self) -> Result<Option<Attribute>> {
+        if std::mem::discriminant(&Token::Attribute(ldef!(), "".into())) != std::mem::discriminant(&self.lexer.peek()) {
+            return Ok(None);
+        }
+        let Token::Attribute(loc, name) = self.lexer.next() else { unreachable!() };
+        match &name[..] {
+            "#extern" => {
+                self.expect(Token::Op(ldef!(), '('))?;
+                let symbol = self.parse_expr_string()?;
+                self.expect(Token::Op(ldef!(), ')'))?;
+                Ok(Some(Attribute::Extern(symbol)))
+            },
+            _ => Err(error!(loc, "Unknown attribute `{name}`")),
         }
     }
 }

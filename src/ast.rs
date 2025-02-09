@@ -25,6 +25,7 @@ pub enum Op {
     NotEq,
     And,
     Range,
+    As,
 }
 
 impl Op {
@@ -109,8 +110,8 @@ pub enum Expr {
     Bool(Token),
     BinOp(Token, Op, Box<Expr>, Box<Expr>),
     UnOp(Token, Op, Box<Expr>, bool), // bool stores prefix/postfix
-    Func(Token, Vec<Param>, Option<Type>, Vec<Stmt>, bool),
-    FuncDecl(Token, Vec<Param>, Option<Type>),
+    Func(Token, Vec<Param>, Option<Type>, Vec<Stmt>, bool, Vec<Attribute>),
+    FuncDecl(Token, Vec<Param>, Option<Type>, Vec<Attribute>),
     Call(Box<Expr>, Vec<Expr>), // TODO: add parameters
     Null(Token),
     InitList(Token, Vec<Expr>), // First token is just for easy location
@@ -128,14 +129,19 @@ impl Expr {
             Expr::Bool(t) => t.loc(),
             Expr::BinOp(t, _, _, _) => t.loc(),
             Expr::UnOp(t, _, _, _) => t.loc(),
-            Expr::Func(t, _, _, _, _) => t.loc(),
-            Expr::FuncDecl(t, _, _) => t.loc(),
+            Expr::Func(t, _, _, _, _, _) => t.loc(),
+            Expr::FuncDecl(t, _, _, _) => t.loc(),
             Expr::Call(t, _) => t.loc(),
             Expr::Null(t) => t.loc(),
             Expr::InitList(t, _) => t.loc(),
             Expr::Range(t, _, _) => t.loc(),
         }
     }
+}
+
+#[derive(Debug, Clone)]
+pub enum Attribute {
+    Extern(Expr),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]

@@ -1,4 +1,4 @@
-:i count 45
+:i count 46
 :b shell 41
 ../target/debug/main ./dbg.eve && ./b.out
 :i returncode 0
@@ -564,6 +564,15 @@ Created executable b.out!
 :b stdout 28
 Created executable b.out!
 3
+
+:b stderr 0
+
+:b shell 49
+../target/debug/main ./hello_world.eve && ./b.out
+:i returncode 0
+:b stdout 38
+Created executable b.out!
+Hello world
 
 :b stderr 0
 

@@ -72,7 +72,7 @@ impl Decorator {
             Expr::Bool(_) => { () },
             Expr::BinOp(_, _, _, _) => { () },
             Expr::UnOp(_, _, _, _) => { () },
-            Expr::Func(_, ref mut params, ref mut ret_type, stmts, _) => {
+            Expr::Func(_, ref mut params, ref mut ret_type, stmts, _, _) => {
                 for param in params.iter_mut() {
                     if param.1.kind == TypeKind::Unresolved {
                         if let Some(typ) = alias_map.get(param.1.alias.as_ref().unwrap()) {
@@ -91,7 +91,7 @@ impl Decorator {
                     Self::rta_stmt(stmt, alias_map);
                 }
             },
-            Expr::FuncDecl(_, _, _) => { () },
+            Expr::FuncDecl(_, _, _, _) => { () },
             Expr::Call(_, _) => { () },
             Expr::Null(_) => { () },
             Expr::InitList(_, _) => { () },
@@ -159,7 +159,7 @@ impl Decorator {
             Expr::Bool(_) => { () },
             Expr::BinOp(_, _, _, _) => { () },
             Expr::UnOp(_, _, _, _) => { () },
-            Expr::Func(_, _, _, stmts, ref mut ret) => {
+            Expr::Func(_, _, _, stmts, ref mut ret, _) => {
                 let mut returns = false;
                 for stmt in stmts {
                     if Self::rtc_stmt(stmt) {
@@ -168,7 +168,7 @@ impl Decorator {
                 }
                 *ret = returns;
             },
-            Expr::FuncDecl(_, _, _) => { () },
+            Expr::FuncDecl(_, _, _, _) => { () },
             Expr::Call(_, _) => { () },
             Expr::Null(_) => { () },
             Expr::InitList(_, _) => { () },
@@ -248,12 +248,12 @@ impl Decorator {
                     }
                 }
             },
-            Expr::Func(_, _, _, stmts, _) => {
+            Expr::Func(_, _, _, stmts, _, _) => {
                 for stmt in stmts {
                     Self::gav_stmt(stmt, addrvars);
                 }
             },
-            Expr::FuncDecl(_, _, _) => { () },
+            Expr::FuncDecl(_, _, _, _) => { () },
             Expr::Call(name, args) => {
                 for expr in args {
                     Self::gav_expr(expr, addrvars);

@@ -133,11 +133,12 @@ pub struct FunctionDecl {
     name: String, //TODO: remove when not needed
     pub params: Vec<Param>,
     ret_type: Option<Type>,
+    pub extern_name: Option<String>,
 }
 
 impl FunctionDecl {
-    pub fn new(params: Vec<Param>, ret_type: Option<Type>, name: String) -> Self {
-        Self { params, ret_type, name }
+    pub fn new(params: Vec<Param>, ret_type: Option<Type>, name: String, extern_name: Option<String>) -> Self {
+        Self { params, ret_type, name, extern_name }
     }
 }
 
@@ -237,7 +238,12 @@ macro_rules! gen_funcall_from_funcdef {
                 }
             }
 
-            gen!($slf, "%.s{tag} ={qt} call ${}.{txt}(", $modname);
+            if def.extern_name.is_some() {
+                let extrn_name = def.extern_name.clone().unwrap();
+                gen!($slf, "%.s{tag} ={qt} call ${extrn_name}(");
+            } else {
+                gen!($slf, "%.s{tag} ={qt} call ${}.{txt}(", $modname);
+            }
 
             // Emit arguments
             gen!($slf, "{}", (stack_values
@@ -357,8 +363,8 @@ function l $.slice.len(l %slc) {{
 
         let mut map = HashMap::new();
         let ptr_typ: Type = Into::<Type>::into(TypeKind::Void).ptr();
-        map.insert("ptr".into(), FunctionDecl::new(vec![], Some(ptr_typ), "ptr".into()));
-        map.insert("len".into(), FunctionDecl::new(vec![], Some(TypeKind::U64.into()), "len".into()));
+        map.insert("ptr".into(), FunctionDecl::new(vec![], Some(ptr_typ), "ptr".into(), None));
+        map.insert("len".into(), FunctionDecl::new(vec![], Some(TypeKind::U64.into()), "len".into(), None));
         comptime.method_map.insert(Type::wrap(TypeKind::Void.into(), StructKind::Slice, None, false), map);
         Ok(())
     }
@@ -427,16 +433,16 @@ function l $.slice.len(l %slc) {{
         match global {
             Global::Decl(name, expr) => {
                 match expr {
-                    Expr::Func(fn_, params, ret_type, stmts, returns) => {
+                    Expr::Func(fn_, params, ret_type, stmts, returns, attrs) => {
                         if !returns && ret_type.is_some() {
                             return Err(error!(fn_.loc(), "This function does not always return, but should return {}", (ret_type.unwrap())));
                         }
                         let Token::Ident(_, text) = name.clone() else { unreachable!() };
                         // TODO IMPORTANT: was this necessary?
                         //self.func_map().insert(text.clone(), FunctionDecl::new(text));
-                        self.emit_function(comptime, params, ret_type, name, stmts)
+                        self.emit_function(comptime, params, ret_type, name, stmts, attrs)
                     },
-                    Expr::FuncDecl(fn_, params, ret_type) => {
+                    Expr::FuncDecl(fn_, params, ret_type, _) => {
                         Ok(())
                     },
                     _ => return Err(error!(name.loc(), "Only global functions are supported for now!")),
@@ -456,10 +462,23 @@ function l $.slice.len(l %slc) {{
         }
     }
 
-    pub fn emit_function(&mut self, comptime: &mut Compiletime, params: Vec<Param>, ret_type: Option<Type>, name: Token, mut stmts: Vec<Stmt>) -> Result<()> {
-        let Token::Ident(loc, text) = name else {
+    pub fn emit_function(&mut self, comptime: &mut Compiletime, params: Vec<Param>, ret_type: Option<Type>, name: Token, mut stmts: Vec<Stmt>, attrs: Vec<Attribute>) -> Result<()> {
+        let Token::Ident(loc, text2) = name else {
             unreachable!("must have an ident here")
         };
+
+        let mut extern_name = None;
+        for attr in attrs {
+            match attr {
+                Attribute::Extern(expr) => {
+                    let Expr::String(Token::String(_, text)) = expr else { unreachable!() };
+                    extern_name = Some(text);
+                },
+                _ => return Err(error_orphan!("Unsupported function attribute `{attr:?}`")),
+            }
+        }
+
+        let text = extern_name.unwrap_or(text2);
 
         self.expected_return = match ret_type {
             Some(ref typ) => typ.clone(),
@@ -1335,10 +1354,10 @@ function l $.slice.len(l %slc) {{
                     c => todo!("op `{c:?}`"),
                 }
             },
-            Expr::Func(_, params, ret_type, stmts, _) => {
+            Expr::Func(_, params, ret_type, stmts, _, _) => {
                 unreachable!("TBD: Should I put emit_function in here?")
             },
-            Expr::FuncDecl(_, _, _) => {
+            Expr::FuncDecl(_, _, _, _) => {
                 unreachable!("can't declare functions within functions")
             },
             Expr::Call(box_expr, mut args) => {

@@ -105,15 +105,20 @@ impl Parser {
                         Some(self.parse_type()?)
                     } else { None };
 
+                    let mut attrs = Vec::new();
+                    while let Some(attr) = self.parse_attribute()? {
+                        attrs.push(attr);
+                    }
+
                     if self.lexer.peek() == Token::Op(ldef!(), ';') {
                         self.lexer.next();
-                        Expr::FuncDecl(Token::Fn(loc), params, return_type)
+                        Expr::FuncDecl(Token::Fn(loc), params, return_type, attrs)
                     } else {
                         if self.lexer.peek() != Token::Op(ldef!(), '{') {
                             return Err(error!(loc, "Missing function body"));
                         }
                         let stmts = self.parse_stmts()?;
-                        Expr::Func(Token::Fn(loc), params, return_type, stmts, false)
+                        Expr::Func(Token::Fn(loc), params, return_type, stmts, false, attrs)
                     }
                 },
                 Token::Eof => Err(error_orphan!("Could not parse expr term from end-of-file"))?,

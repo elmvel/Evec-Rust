@@ -11,6 +11,7 @@ pub enum Token {
     Int(Location, i64),
     String(Location, String),
     CString(Location, String),
+    Attribute(Location, String),
     Op(Location, char),
     WideOp(Location, (char, char)),
     Dots(Location),
@@ -58,6 +59,7 @@ impl Token {
             Token::Int(loc, _) => loc.clone(),
             Token::String(loc, _) => loc.clone(),
             Token::CString(loc, _) => loc.clone(),
+            Token::Attribute(loc, _) => loc.clone(),
             Token::Op(loc, _) => loc.clone(),
             Token::WideOp(loc, _) => loc.clone(),
             Token::Dots(loc) => loc.clone(),
@@ -212,6 +214,14 @@ impl Lexer {
                 '<' | ',' | '&' => {
                         tokens.push(Token::Op(Location::new(input_path.into(), line, col), ch));
                         col += 1;
+                },
+                '#' => {
+                    let n: String = iter::once(ch)
+                        .chain(from_fn(|| iter.by_ref().next_if(|s| s.is_ascii_alphanumeric())))
+                        .collect::<String>();
+                    let loc = Location::new(input_path.into(), line, col);
+                    col += n.len();
+                    tokens.push(Token::Attribute(loc, n));
                 },
                 '"' => {
                     let n: String = iter::once(ch)
