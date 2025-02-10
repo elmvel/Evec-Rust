@@ -1,12 +1,7 @@
 module hello;
 
-import libc::mem;
+import std::io;
 
 main :: fn() {
-    let xs: [_]u32 = {1, 2, 3};
-    let x = xs[..];
-    let p: *[]u32 = mem::malloc(16);
-    *p = x;
-    dbg (*p).len();
-    mem::free(p);
+    io::println("Hello world");
 }
