@@ -1485,6 +1485,8 @@ impl Compiletime {
         }
         for decorated_mod in decorated_mods.drain(..) {
             let name = decorated_mod.parse_module.file_stem.clone();
+            let modname = path_to_string(decorated_mod.parse_module.name.clone());
+            let name = format!("{modname}.{name}");
 
             let mut generator = Generator::new(decorated_mod);
             generator.emit(self)?;

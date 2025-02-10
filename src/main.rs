@@ -1,7 +1,7 @@
 #![allow(warnings)] // for now
 
 use std::process::ExitCode;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use crate::lexer::Lexer;
 use crate::parser::Parser;
@@ -117,9 +117,25 @@ fn main() -> ExitCode {
         return ExitCode::FAILURE;
     }
 
+    fetch_stdlib(&mut input_paths);
+
     match entry(input_paths, options) {
         Ok(_) => ExitCode::SUCCESS,
         Err(_) => ExitCode::FAILURE,
+    }
+}
+
+fn fetch_stdlib(input_paths: &mut Vec<String>) {
+    let mut paths = std::fs::read_dir("../std/").unwrap()
+        .map(|de| de.unwrap().path())
+        .collect::<Vec<PathBuf>>();
+    while !paths.is_empty() {
+        let path = paths.pop().unwrap();
+        if path.is_dir() {
+            paths.extend(std::fs::read_dir(path).unwrap().map(|de| de.unwrap().path()));
+        } else {
+            input_paths.push(format!("{}", path.display()));
+        }
     }
 }
 

@@ -1,8 +1,8 @@
 module libc::proc;
 
-type pid_t = s32;
+type pid = s32;
 
-fork :: fn() -> pid_t #extern("fork");
+fork :: fn() -> pid #extern("fork");
 execv :: fn(filename: cstr, argv: **u8) -> s32 #extern("execv");
 execve :: fn(filename: cstr, argv: **u8, env: **u8) -> s32 #extern("execve");
 execvp :: fn(filename: cstr, argv: **u8) -> s32 #extern("execvp");

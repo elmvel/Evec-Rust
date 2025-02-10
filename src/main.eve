@@ -1,7 +1,9 @@
 module hello;
 
 import std::io;
+import libc::io;
 
 main :: fn() {
-    io::print(c"Hiiiiiii haiiii hiii :3 haiiiii");
+    libc::io::puts(c"Hello from std libc!");
+    std::io::print("Hello from std io!");
 }

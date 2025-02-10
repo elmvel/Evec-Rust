@@ -1,0 +1,7 @@
+module std::io;
+
+import libc::io;
+
+print :: fn(s: str) {
+    libc::io::write(1, s.ptr(), s.len());
+}
