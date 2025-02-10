@@ -1,7 +1,7 @@
 module hello;
 
-puts :: fn(text: cstr) #extern("puts");
+import std::io;
 
 main :: fn() {
-    puts(c"Hello world");
+    io::print(c"Hiiiiiii haiiii hiii :3 haiiiii");
 }

@@ -43,6 +43,7 @@ pub enum Token {
     S16(Location),
     S8(Location),
     Bool(Location),
+    Void(Location),
 
     // Special Values
     True(Location),
@@ -87,6 +88,7 @@ impl Token {
             Token::S16(loc) => loc.clone(),
             Token::S8(loc) => loc.clone(),
             Token::Bool(loc) => loc.clone(),
+            Token::Void(loc) => loc.clone(),
             Token::True(loc) => loc.clone(),
             Token::False(loc) => loc.clone(),
             Token::Eof => panic!("Didn't handle Eof in previous match case"),
@@ -303,6 +305,7 @@ impl Lexer {
             "s16" => Token::S16(loc),
             "s8" => Token::S8(loc),
             "bool" => Token::Bool(loc),
+            "void" => Token::Void(loc),
 
             "true" => Token::True(loc),
             "false" => Token::False(loc),

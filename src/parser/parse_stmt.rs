@@ -99,6 +99,7 @@ impl Parser {
                 Token::S16(_) => TypeKind::S16.into(),
                 Token::S8(_) => TypeKind::S8.into(),
                 Token::Bool(_) => TypeKind::Bool.into(),
+                Token::Void(_) => TypeKind::Void.into(),
                 Token::Ident(_, text) => Type::alias(text),
                 Token::Eof => Err(error_orphan!("Expected type but got end-of-file"))?,
                 t => Err(error!(t.loc(), "Expected type!"))?,
