@@ -381,14 +381,51 @@ function l $.slice.len(l %slc) {{
             return typ.clone();
         }
     }
+    
+    fn escape_string(mut text: &str) -> (String, usize) {
+        let mut buf = String::new();
+        let mut len = 0;
+        while !text.is_empty() {
+            if text.starts_with("\\n") {
+                buf.push_str("\\x0A");
+                text = &text[2..];
+            } else if text.starts_with("\\r") {
+                buf.push_str("\\x0D");
+                text = &text[2..];
+            } else if text.starts_with("\\t") {
+                buf.push_str("\\x09");
+                text = &text[2..];
+            } else if text.starts_with("\\v") {
+                buf.push_str("\\x0B");
+                text = &text[2..];
+            } else if text.starts_with("\\0") {
+                buf.push_str("\\x00");
+                text = &text[2..];
+            } else if text.starts_with("\\x") && text.len() >= 4 {
+                let mut it = text.chars().take(4);
+                let (Some('\\'), Some('x'), Some(a), Some(b)) = (it.next(), it.next(), it.next(), it.next()) else {
+                    unreachable!();
+                };
+                buf.push_str("\\x");
+                buf.push(a);
+                buf.push(b);
+                text = &text[4..];
+            } else {
+                buf.push(text.chars().nth(0).expect("We have characters if its not empty"));
+                text = &text[1..];
+            }
+            len += 1;
+        }
+        (buf, len)
+    }
 
     fn emit_strings(&mut self) -> Result<()> {
         let mut c = 0;
         self.strings.reverse();
         while !self.strings.is_empty() {
-            let string = self.strings.pop().unwrap(); 
+            let (string, len) = Generator::escape_string(&self.strings.pop().unwrap()); 
             genf!(self, "data $.str.data{c} = {{ b \"{string}\" }}");
-            genf!(self, "data $.str{c} = {{ l $.str.data{c}, l {} }}", (string.len()));
+            genf!(self, "data $.str{c} = {{ l $.str.data{c}, l {} }}", len);
             c += 1;
         }
         Ok(())
@@ -398,7 +435,7 @@ function l $.slice.len(l %slc) {{
         let mut c = 0;
         self.cstrings.reverse();
         while !self.cstrings.is_empty() {
-            let cstring = self.cstrings.pop().unwrap(); 
+            let (cstring, _) = Generator::escape_string(&self.cstrings.pop().unwrap()); 
             genf!(self, "data $.cstr{c} = {{ b \"{cstring}\", b 0 }}");
             c += 1;
         }

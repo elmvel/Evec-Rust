@@ -1,4 +1,4 @@
-:i count 46
+:i count 47
 :b shell 41
 ../target/debug/main ./dbg.eve && ./b.out
 :i returncode 0
@@ -573,6 +573,17 @@ Created executable b.out!
 :b stdout 38
 Created executable b.out!
 Hello world
+
+:b stderr 0
+
+:b shell 53
+../target/debug/main ./string_escaping.eve && ./b.out
+:i returncode 0
+:b stdout 103
+Created executable b.out!
+Hello from std io!
+This is also a new line!
+This C string is cut off early! 
 
 :b stderr 0
 
