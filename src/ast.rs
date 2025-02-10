@@ -196,6 +196,18 @@ pub enum StructKind {
 }
 
 impl Type {
+    pub fn copy(other: &Type) -> Self {
+        Self {
+            kind: other.kind.clone(),
+            indirection: other.indirection,
+            struct_kind: other.struct_kind.clone(),
+            elements: other.elements,
+            infer_elements: other.infer_elements,
+            inner: other.inner.clone(),
+            alias: None,
+        }
+    }
+
     pub fn wrap(typ: Type, struct_kind: StructKind, elements: Option<usize>, infer_elements: bool) -> Self {
         Self {
             kind: TypeKind::Structure,
@@ -220,6 +232,10 @@ impl Type {
 
     pub fn is_ptr(&self) -> bool {
         self.indirection > 0
+    }
+    
+    pub fn is_void_ptr(&self) -> bool {
+        self.is_ptr() && self.kind == TypeKind::Void
     }
     
     pub fn ptr(&self) -> Self {
@@ -378,7 +394,7 @@ impl Type {
         }
     }
 
-    pub fn soft_equals(&mut self, rhs: &mut Type) -> bool {
+    pub fn soft_equals_array(&mut self, rhs: &mut Type) -> bool {
         if self.infer_elements && !rhs.infer_elements {
             self.elements = rhs.elements;
             self.infer_elements = false;
@@ -386,6 +402,18 @@ impl Type {
         if !self.infer_elements && rhs.infer_elements {
             rhs.elements = self.elements;
             rhs.infer_elements = false;
+        }
+        if self.is_ptr() && rhs.is_void_ptr() {
+            todo!("assigning void ptr?");
+        }
+        self.soft_equals(rhs)
+    }
+
+    pub fn soft_equals(&mut self, rhs: &Type) -> bool {
+        // can convert between *void <=> *type
+        if self.is_void_ptr() && rhs.is_ptr() || self.is_ptr() && rhs.is_void_ptr() {
+            *self = Type::copy(rhs);
+            return true;
         }
         self == rhs
     }

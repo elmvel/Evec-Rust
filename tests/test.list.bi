@@ -1,4 +1,4 @@
-:i count 47
+:i count 48
 :b shell 41
 ../target/debug/main ./dbg.eve && ./b.out
 :i returncode 0
@@ -584,6 +584,15 @@ Created executable b.out!
 Hello from std io!
 This is also a new line!
 This C string is cut off early! 
+
+:b stderr 0
+
+:b shell 61
+../target/debug/main ./malloc_free_and_voidptr.eve && ./b.out
+:i returncode 0
+:b stdout 28
+Created executable b.out!
+3
 
 :b stderr 0
 

@@ -45,3 +45,4 @@
 ../target/debug/main ./struct_pointer.eve && ./b.out
 ../target/debug/main ./hello_world.eve && ./b.out
 ../target/debug/main ./string_escaping.eve && ./b.out
+../target/debug/main ./malloc_free_and_voidptr.eve && ./b.out

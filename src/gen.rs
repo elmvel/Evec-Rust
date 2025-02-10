@@ -233,7 +233,7 @@ macro_rules! gen_funcall_from_funcdef {
                 if def.params.get(i).unwrap().1.infer_elements {
                     return Err(error!(def.params[i].0.loc(), "Inferring array sizes is not supported in function parameters!"));
                 }
-                if stack_values[i].typ != def.params.get(i).unwrap().1 {
+                if !stack_values[i].typ.soft_equals(&def.params.get(i).unwrap().1) {
                     return Err(error!(def.params[i].0.loc(), "Parameter expected type {}, but got {} instead.", (def.params[i].1), (stack_values[i].typ)));
                 }
             }
@@ -817,7 +817,7 @@ function l $.slice.len(l %slc) {{
                 };
                 
                 if let Some(mut expected_type) = typ {
-                    if !val.typ.soft_equals(&mut expected_type) {
+                    if !val.typ.soft_equals_array(&mut expected_type) {
                         return Err(error!(loc, "Expected type {expected_type}, but got {} instead", (val.typ)));
                     }
                 }
