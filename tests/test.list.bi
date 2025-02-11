@@ -1,4 +1,4 @@
-:i count 48
+:i count 49
 :b shell 41
 ../target/debug/main ./dbg.eve && ./b.out
 :i returncode 0
@@ -593,6 +593,16 @@ This C string is cut off early!
 :b stdout 28
 Created executable b.out!
 3
+
+:b stderr 0
+
+:b shell 54
+../target/debug/main ./nullptr_equality.eve && ./b.out
+:i returncode 0
+:b stdout 42
+Created executable b.out!
+bool: 0
+bool: 1
 
 :b stderr 0
 

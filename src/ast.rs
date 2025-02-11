@@ -363,6 +363,17 @@ impl Type {
         }
     }
 
+    pub fn assert_comparable(&self, loc: Location) -> Result<()> {
+        if self.is_ptr() {
+            return Ok(());
+        }
+        match self.kind {
+            TypeKind::U64 | TypeKind::U32 | TypeKind::U16 | TypeKind::U8 |
+            TypeKind::S64 | TypeKind::S32 | TypeKind::S16 | TypeKind::S8 => Ok(()),
+            _ => Err(error!(loc, "Expected type to be a number")),
+        }
+    }
+
     pub fn assert_bool(&self, loc: Location) -> Result<()> {
         if self.is_ptr() {
             return Err(error!(loc, "Expected boolean"));

@@ -1,0 +1,9 @@
+module hello;
+
+main :: fn() {
+    let n: u8 = 69;
+    let buf: *u8 = &n;
+    let p: *u8 = null;
+    dbg buf == null;
+    dbg p == null;
+}

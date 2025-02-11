@@ -1155,9 +1155,9 @@ function l $.slice.len(l %slc) {{
                         let rloc = box_rhs.loc();
                         
                         let lval = self.emit_expr(comptime, *box_lhs, expected_type)?;
-                        lval.typ.assert_number(lloc)?;
+                        lval.typ.assert_comparable(lloc)?;
                         let rval = self.emit_expr(comptime, *box_rhs, Some(lval.typ.clone()))?;
-                        rval.typ.assert_number(rloc)?;
+                        rval.typ.assert_comparable(rloc)?;
 
                         let tag = self.ctx.alloc();
 

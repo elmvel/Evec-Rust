@@ -2,6 +2,16 @@ module hello;
 
 import std::io;
 
+import libc::mem;
+
+gets :: fn(buf: *u8) -> *u8 #extern("gets");
+
 main :: fn() {
-    io::println("Hello world");
+    let n: usize = 1024;
+    let buf: *u8 = mem::malloc(n);
+    if gets(buf) == null {
+        io::println("An error occurred");
+    } else {
+        io::println("got a string!");
+    }
 }
