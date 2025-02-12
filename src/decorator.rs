@@ -70,8 +70,13 @@ impl Decorator {
             Expr::String(_) => { () },
             Expr::CString(_) => { () },
             Expr::Bool(_) => { () },
-            Expr::BinOp(_, _, _, _) => { () },
-            Expr::UnOp(_, _, _, _) => { () },
+            Expr::BinOp(_, _, ref mut box_lhs, ref mut box_rhs) => {
+                Self::rta_expr(box_lhs, alias_map);
+                Self::rta_expr(box_rhs, alias_map);
+            },
+            Expr::UnOp(_, _, box_expr, _) => {
+                Self::rta_expr(box_expr, alias_map);
+            },
             Expr::Func(_, ref mut params, ref mut ret_type, stmts, _, _) => {
                 for param in params.iter_mut() {
                     if param.1.kind == TypeKind::Unresolved {
@@ -92,16 +97,33 @@ impl Decorator {
                 }
             },
             Expr::FuncDecl(_, _, _, _) => { () },
-            Expr::Call(_, _) => { () },
+            Expr::Call(_, ref mut args) => {
+                for expr in args.iter_mut() {
+                    Self::rta_expr(expr, alias_map);
+                }
+            },
             Expr::Null(_) => { () },
-            Expr::InitList(_, _) => { () },
-            Expr::Range(_, _, _) => { () },
+            Expr::InitList(_, ref mut exprs) => {
+                for expr in exprs.iter_mut() {
+                    Self::rta_expr(expr, alias_map);
+                }
+            },
+            Expr::Range(_, _, _) => { () }, // TODO: I might need to do this but im lazy for now
+            Expr::Cast(_, _, ref mut typ) => {
+                if typ.kind == TypeKind::Unresolved {
+                    if let Some(typ2) = alias_map.get(typ.alias.as_ref().unwrap()) {
+                        *typ = typ2.clone();
+                    }
+                }
+            },
         }
     }
 
     pub fn rta_stmt(stmt: &mut Stmt, alias_map: &HashMap<String, Type>) -> () {
         match stmt {
-            Stmt::Dbg(_) => { () },
+            Stmt::Dbg(ref mut expr) => {
+                Self::rta_expr(expr, alias_map);
+            },
             Stmt::Let(_, ref mut typ, _) => {
                 if let Some(ref mut rt) = typ {
                     if rt.kind == TypeKind::Unresolved {
@@ -111,25 +133,27 @@ impl Decorator {
                     }
                 }
             },
-            Stmt::Scope(stmts) => {
-                for stmt in stmts {
+            Stmt::Scope(ref mut stmts) => {
+                for stmt in stmts.iter_mut() {
                     Self::rta_stmt(stmt, alias_map);
                 }
             },
-            Stmt::Ex(_) => { () },
-            Stmt::If(_, box_stmt, opt) => {
+            Stmt::Ex(ref mut expr) => {
+                Self::rta_expr(expr, alias_map);
+            },
+            Stmt::If(_, ref mut box_stmt, ref mut opt) => {
                 Self::rta_stmt(box_stmt, alias_map);
                 if let Some(box_else_block) = opt {
                     Self::rta_stmt(box_else_block, alias_map);
                 }
             },
-            Stmt::While(_, box_stmt) => {
+            Stmt::While(_, ref mut box_stmt) => {
                 Self::rta_stmt(box_stmt, alias_map);
             },
             Stmt::Break(_) => { () },
             Stmt::Continue(_) => { () },
             Stmt::Return(_, _, _, _) => { () },
-            Stmt::Defer(_, box_stmt) => { Self::rta_stmt(box_stmt, alias_map); },
+            Stmt::Defer(_, ref mut box_stmt) => { Self::rta_stmt(box_stmt, alias_map); },
         }
     }
 
@@ -173,6 +197,7 @@ impl Decorator {
             Expr::Null(_) => { () },
             Expr::InitList(_, _) => { () },
             Expr::Range(_, _, _) => { () },
+            Expr::Cast(_, _, _) => { () },
         }
     }
 
@@ -266,6 +291,9 @@ impl Decorator {
                 }
             },
             Expr::Range(_, _, _) => { /* Even though we have expressions here, they cannot be pointers */ () },
+            Expr::Cast(_, box_expr, _) => {
+                Self::gav_expr(box_expr, addrvars);
+            },
         }
     }
 

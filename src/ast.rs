@@ -116,6 +116,7 @@ pub enum Expr {
     Null(Token),
     InitList(Token, Vec<Expr>), // First token is just for easy location
     Range(Token, Option<Box<Expr>>, Option<Box<Expr>>),
+    Cast(Token, Box<Expr>, Type),
 }
 
 impl Expr {
@@ -135,6 +136,7 @@ impl Expr {
             Expr::Null(t) => t.loc(),
             Expr::InitList(t, _) => t.loc(),
             Expr::Range(t, _, _) => t.loc(),
+            Expr::Cast(t, _, _) => t.loc(),
         }
     }
 }

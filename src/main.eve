@@ -1,17 +1,18 @@
 module hello;
 
 import std::io;
-
+import libc::io;
 import libc::mem;
-
-gets :: fn(buf: *u8) -> *u8 #extern("gets");
 
 main :: fn() {
     let n: usize = 1024;
     let buf: *u8 = mem::malloc(n);
-    if gets(buf) == null {
-        io::println("An error occurred");
+    let len = libc::io::read(0, buf, n);
+    if len < 0 {
+        std::io::println("An error occurred");
     } else {
-        io::println("got a string!");
+        std::io::print("got a string: `");
+        libc::io::write(1, buf, len as usize);
+        std::io::println("`");
     }
 }

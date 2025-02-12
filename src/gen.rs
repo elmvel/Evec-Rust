@@ -1498,9 +1498,44 @@ function l $.slice.len(l %slc) {{
             Expr::Range(token, upper, lower) => {
                 todo!("probably unreachable!");
             },
+            Expr::Cast(token, box_expr, to_typ) => {
+                let loc = box_expr.loc();
+                let val = self.emit_expr(comptime, *box_expr, Some(to_typ.clone()))?;
+                if val.typ.assert_number(loc.clone()).is_ok() && to_typ.assert_number(loc).is_ok() {
+                    let tag = self.convert_primitive_int(&val, &to_typ);
+                    Ok(StackValue{tag, typ: to_typ})
+                } else {
+                    todo!("unsupported conversion");
+                }
+            },
         }
     }
 
+    // Must pass a number
+    fn convert_primitive_int(&mut self, val: &StackValue, to_typ: &Type) -> usize {
+        match val.typ.kind {
+            TypeKind::U64 | TypeKind::S64 => {
+                let tag = self.ctx.alloc();
+                let qtype = to_typ.qbe_type();
+                genf!(self, "%.s{tag} ={qtype} copy %.s{val}");
+                tag
+            },
+            TypeKind::U32 | TypeKind::S32 => {
+                let tag = self.ctx.alloc();
+                let qtype = to_typ.qbe_type();
+                if to_typ.sizeof() > val.typ.sizeof() {
+                    self.extend_to_long(val.tag, &val.typ)
+                } else {
+                    genf!(self, "%.s{tag} ={qtype} copy %.s{val}");
+                    tag
+                }
+            },
+            TypeKind::U16 | TypeKind::S16 | TypeKind::U8 | TypeKind::S8 => {
+                todo!("Might want to wait for refactor");
+            },
+            _ => unreachable!(),
+        }
+    }
 }
 
 

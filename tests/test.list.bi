@@ -1,4 +1,4 @@
-:i count 49
+:i count 50
 :b shell 41
 ../target/debug/main ./dbg.eve && ./b.out
 :i returncode 0
@@ -603,6 +603,15 @@ Created executable b.out!
 Created executable b.out!
 bool: 0
 bool: 1
+
+:b stderr 0
+
+:b shell 42
+../target/debug/main ./cast.eve && ./b.out
+:i returncode 0
+:b stdout 29
+Created executable b.out!
+69
 
 :b stderr 0
 

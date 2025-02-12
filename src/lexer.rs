@@ -32,6 +32,7 @@ pub enum Token {
     Null(Location),
     Defer(Location),
     Type(Location),
+    As(Location),
 
     // Types
     U64(Location),
@@ -79,6 +80,7 @@ impl Token {
             Token::Null(loc) => loc.clone(),
             Token::Defer(loc) => loc.clone(),
             Token::Type(loc) => loc.clone(),
+            Token::As(loc) => loc.clone(),
             Token::U64(loc) => loc.clone(),
             Token::U32(loc) => loc.clone(),
             Token::U16(loc) => loc.clone(),
@@ -295,6 +297,7 @@ impl Lexer {
             "null" => Token::Null(loc),
             "defer" => Token::Defer(loc),
             "type" => Token::Type(loc),
+            "as" => Token::As(loc),
 
             "u64" => Token::U64(loc),
             "u32" => Token::U32(loc),

@@ -47,3 +47,4 @@
 ../target/debug/main ./string_escaping.eve && ./b.out
 ../target/debug/main ./malloc_free_and_voidptr.eve && ./b.out
 ../target/debug/main ./nullptr_equality.eve && ./b.out
+../target/debug/main ./cast.eve && ./b.out

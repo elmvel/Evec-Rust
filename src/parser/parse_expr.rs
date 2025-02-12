@@ -8,7 +8,13 @@ use crate::errors::SyntaxError;
 
 impl Parser {
     pub fn parse_expr(&mut self) -> Result<Expr> {
-        self.parse_expr_bp(0) 
+        let mut expr = self.parse_expr_bp(0)?;
+        if self.lexer.peek() == Token::As(ldef!()) {
+            let as_ = self.lexer.next();
+            let typ = self.parse_type()?;
+            expr = Expr::Cast(as_, Box::new(expr), typ);
+        }
+        Ok(expr)
     }
 
     // TODO: proper error reporting (-> Result<Option<Expr>>)
