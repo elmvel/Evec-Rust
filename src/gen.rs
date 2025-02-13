@@ -1388,6 +1388,19 @@ function l $.slice.len(l %slc) {{
                         let tag = self.load_type(&deref, ptr.tag, format!("%.s{ptr}"));
                         Ok(StackValue{tag: tag, typ: deref})
                     },
+                    Op::Implicit => {
+                        let loc = box_expr.loc();
+                        let val = self.emit_expr(comptime, *box_expr, None)?;
+                        if let Some(typ) = expected_type {
+                            if !typ.assert_number(loc.clone()).is_ok() && !val.typ.assert_number(loc.clone()).is_ok() {
+                                return Err(error!(loc, "Only implicit conversions between integers are supported!"));
+                            }
+                            let tag = self.convert_primitive_int(&val, &typ);
+                            Ok(StackValue{tag, typ})
+                        } else {
+                            return Err(error!(loc, "Need a type to infer for implicit conversion!"))
+                        }
+                    },
                     c => todo!("op `{c:?}`"),
                 }
             },

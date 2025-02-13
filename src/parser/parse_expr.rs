@@ -79,7 +79,11 @@ impl Parser {
                         _ => Expr::Range(Token::WideOp(loc, ('.', '.')), None, None),
                     }
                 },
-
+                Token::WideOp(loc, op) => {
+                    let ((), r_bp) = prefix_binding_power(op.try_into()?)?;
+                    let rhs = self.parse_expr_bp(r_bp);
+                    Expr::UnOp(Token::WideOp(loc, op), op.try_into()?, Box::new(rhs?), false)
+                },
                 Token::Op(_, '(') => {
                     let lhs = self.parse_expr_bp(0);
                     self.expect(Token::Op(ldef!(), ')'))?;

@@ -156,6 +156,7 @@ const WIDE_CHARS: &[(char, char)] = &[
     ('!', '='),
     ('-', '>'),
     ('.', '.'),
+    ('x', 'x'), // I would use a different name but 'im' conflicts with 'import'
 ];
 
 impl Lexer {

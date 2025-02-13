@@ -26,6 +26,7 @@ pub enum Op {
     And,
     Range,
     As,
+    Implicit,
 }
 
 impl Op {
@@ -71,6 +72,7 @@ impl TryInto<Op> for (char, char) {
             ('=', '=') => Ok(Op::EqEq),
             ('!', '=') => Ok(Op::NotEq),
             ('.', '.') => Ok(Op::Range),
+            ('x', 'x') => Ok(Op::Implicit),
             c => Err(error_orphan!("Could not convert to op: {c:?}")),
         }
     }
