@@ -1543,8 +1543,89 @@ function l $.slice.len(l %slc) {{
                     tag
                 }
             },
-            TypeKind::U16 | TypeKind::S16 | TypeKind::U8 | TypeKind::S8 => {
-                todo!("Might want to wait for refactor");
+            TypeKind::U16 => {
+                if to_typ.sizeof() > val.typ.sizeof() {
+                    match to_typ.sizeof() {
+                        8 => {
+                            self.extend_to_long(val.tag, &val.typ)
+                        },
+                        4 => {
+                            let tag = self.ctx.alloc();
+                            let qtype = to_typ.qbe_type();
+                            genf!(self, "%.s{tag} ={qtype} extuh %.s{val}");
+                            tag
+                        },
+                        _ => unreachable!(),
+                    }
+                } else {
+                    let tag = self.ctx.alloc();
+                    let qtype = to_typ.qbe_type();
+                    genf!(self, "%.s{tag} ={qtype} copy %.s{val}");
+                    tag
+                }
+            },
+            TypeKind::S16 => {
+                if to_typ.sizeof() > val.typ.sizeof() {
+                    match to_typ.sizeof() {
+                        8 => {
+                            self.extend_to_long(val.tag, &val.typ)
+                        },
+                        4 => {
+                            let tag = self.ctx.alloc();
+                            let qtype = to_typ.qbe_type();
+                            genf!(self, "%.s{tag} ={qtype} extsh %.s{val}");
+                            tag
+                        },
+                        _ => unreachable!(),
+                    }
+                } else {
+                    let tag = self.ctx.alloc();
+                    let qtype = to_typ.qbe_type();
+                    genf!(self, "%.s{tag} ={qtype} copy %.s{val}");
+                    tag
+                }
+            },
+            TypeKind::U8 => {
+                if to_typ.sizeof() > val.typ.sizeof() {
+                    match to_typ.sizeof() {
+                        8 => {
+                            self.extend_to_long(val.tag, &val.typ)
+                        },
+                        4 | 2 => {
+                            let tag = self.ctx.alloc();
+                            let qtype = to_typ.qbe_type();
+                            genf!(self, "%.s{tag} ={qtype} extub %.s{val}");
+                            tag
+                        },
+                        _ => unreachable!(),
+                    }
+                } else {
+                    let tag = self.ctx.alloc();
+                    let qtype = to_typ.qbe_type();
+                    genf!(self, "%.s{tag} ={qtype} copy %.s{val}");
+                    tag
+                }
+            },
+            TypeKind::S8 => {
+                if to_typ.sizeof() > val.typ.sizeof() {
+                    match to_typ.sizeof() {
+                        8 => {
+                            self.extend_to_long(val.tag, &val.typ)
+                        },
+                        4 | 2 => {
+                            let tag = self.ctx.alloc();
+                            let qtype = to_typ.qbe_type();
+                            genf!(self, "%.s{tag} ={qtype} extsb %.s{val}");
+                            tag
+                        },
+                        _ => unreachable!(),
+                    }
+                } else {
+                    let tag = self.ctx.alloc();
+                    let qtype = to_typ.qbe_type();
+                    genf!(self, "%.s{tag} ={qtype} copy %.s{val}");
+                    tag
+                }
             },
             _ => unreachable!(),
         }

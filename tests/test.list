@@ -49,3 +49,4 @@
 ../target/debug/main ./nullptr_equality.eve && ./b.out
 ../target/debug/main ./cast.eve && ./b.out
 ../target/debug/main ./implicit.eve && ./b.out
+../target/debug/main ./implicit2.eve && ./b.out
