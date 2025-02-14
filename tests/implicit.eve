@@ -1,0 +1,10 @@
+module hello;
+
+import std::io;
+import libc::io;
+import libc::mem;
+
+main :: fn() {
+    let x: u32 = 69;
+    let y: u64 = im x;
+}

@@ -298,6 +298,7 @@ impl Lexer {
             "defer" => Token::Defer(loc),
             "type" => Token::Type(loc),
             "as" => Token::As(loc),
+            "im" => Token::WideOp(loc, ('i', 'm')),
 
             "u64" => Token::U64(loc),
             "u32" => Token::U32(loc),
