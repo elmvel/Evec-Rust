@@ -17,13 +17,13 @@ main :: fn() {
 
 uu64 :: fn() {
     let x: u64 = 69;
-    let a: s64 = xx x;
-    let b: u32 = xx x;
-    let c: u16 = xx x;
-    let d: u8  = xx x;
-    let e: s32 = xx x;
-    let f: s16 = xx x;
-    let g: s8  = xx x;
+    let a: s64 = im x;
+    let b: u32 = im x;
+    let c: u16 = im x;
+    let d: u8  = im x;
+    let e: s32 = im x;
+    let f: s16 = im x;
+    let g: s8  = im x;
     dbg a;
     dbg b;
     dbg c;
@@ -36,13 +36,13 @@ uu64 :: fn() {
 
 ss64 :: fn() {
     let x: s64 = 69;
-    let a: u64 = xx x;
-    let b: u32 = xx x;
-    let c: u16 = xx x;
-    let d: u8  = xx x;
-    let e: s32 = xx x;
-    let f: s16 = xx x;
-    let g: s8  = xx x;
+    let a: u64 = im x;
+    let b: u32 = im x;
+    let c: u16 = im x;
+    let d: u8  = im x;
+    let e: s32 = im x;
+    let f: s16 = im x;
+    let g: s8  = im x;
     dbg a;
     dbg b;
     dbg c;
@@ -55,13 +55,13 @@ ss64 :: fn() {
 
 uu32 :: fn() {
     let x: u32 = 69;
-    let a: s32 = xx x;
-    let b: u64 = xx x;
-    let c: u16 = xx x;
-    let d: u8  = xx x;
-    let e: s64 = xx x;
-    let f: s16 = xx x;
-    let g: s8  = xx x;
+    let a: s32 = im x;
+    let b: u64 = im x;
+    let c: u16 = im x;
+    let d: u8  = im x;
+    let e: s64 = im x;
+    let f: s16 = im x;
+    let g: s8  = im x;
     dbg a;
     dbg b;
     dbg c;
@@ -74,13 +74,13 @@ uu32 :: fn() {
 
 ss32 :: fn() {
     let x: s32 = 69;
-    let a: u32 = xx x;
-    let b: u64 = xx x;
-    let c: u16 = xx x;
-    let d: u8  = xx x;
-    let e: s64 = xx x;
-    let f: s16 = xx x;
-    let g: s8  = xx x;
+    let a: u32 = im x;
+    let b: u64 = im x;
+    let c: u16 = im x;
+    let d: u8  = im x;
+    let e: s64 = im x;
+    let f: s16 = im x;
+    let g: s8  = im x;
     dbg a;
     dbg b;
     dbg c;
@@ -93,13 +93,13 @@ ss32 :: fn() {
 
 uu16 :: fn() {
     let x: u16 = 69;
-    let a: s16 = xx x;
-    let b: u64 = xx x;
-    let c: u32 = xx x;
-    let d: u8  = xx x;
-    let e: s64 = xx x;
-    let f: s32 = xx x;
-    let g: s8  = xx x;
+    let a: s16 = im x;
+    let b: u64 = im x;
+    let c: u32 = im x;
+    let d: u8  = im x;
+    let e: s64 = im x;
+    let f: s32 = im x;
+    let g: s8  = im x;
     dbg a;
     dbg b;
     dbg c;
@@ -112,13 +112,13 @@ uu16 :: fn() {
 
 ss16 :: fn() {
     let x: s16 = 69;
-    let a: u16 = xx x;
-    let b: u64 = xx x;
-    let c: u32 = xx x;
-    let d: u8  = xx x;
-    let e: s64 = xx x;
-    let f: s32 = xx x;
-    let g: s8  = xx x;
+    let a: u16 = im x;
+    let b: u64 = im x;
+    let c: u32 = im x;
+    let d: u8  = im x;
+    let e: s64 = im x;
+    let f: s32 = im x;
+    let g: s8  = im x;
     dbg a;
     dbg b;
     dbg c;
@@ -131,13 +131,13 @@ ss16 :: fn() {
 
 uu8 :: fn() {
     let x: u8  = 69;
-    let a: s8  = xx x;
-    let b: u64 = xx x;
-    let c: u32 = xx x;
-    let d: u16 = xx x;
-    let e: s64 = xx x;
-    let f: s32 = xx x;
-    let g: s16 = xx x;
+    let a: s8  = im x;
+    let b: u64 = im x;
+    let c: u32 = im x;
+    let d: u16 = im x;
+    let e: s64 = im x;
+    let f: s32 = im x;
+    let g: s16 = im x;
     dbg a;
     dbg b;
     dbg c;
@@ -150,13 +150,13 @@ uu8 :: fn() {
 
 ss8 :: fn() {
     let x: s8  = 69;
-    let a: u8  = xx x;
-    let b: u64 = xx x;
-    let c: u32 = xx x;
-    let d: u16 = xx x;
-    let e: s64 = xx x;
-    let f: s32 = xx x;
-    let g: s16 = xx x;
+    let a: u8  = im x;
+    let b: u64 = im x;
+    let c: u32 = im x;
+    let d: u16 = im x;
+    let e: s64 = im x;
+    let f: s32 = im x;
+    let g: s16 = im x;
     dbg a;
     dbg b;
     dbg c;

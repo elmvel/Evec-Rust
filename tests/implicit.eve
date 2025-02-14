@@ -6,5 +6,5 @@ import libc::mem;
 
 main :: fn() {
     let x: u32 = 69;
-    let y: u64 = xx x;
+    let y: u64 = im x;
 }
