@@ -4,3 +4,4 @@
 /src/out.s
 /src/out.ssa
 /tests/b.out
+/src/.build/

@@ -1688,16 +1688,21 @@ impl Compiletime {
             let mut generator = Generator::new(decorated_mod);
             generator.emit(self)?;
 
-            let mut file = File::create(&format!("{name}.ssa")).or(Err(error_orphan!("Could not create qbe output file")))?;
+            let bf = "./.build/"; // build folder
+            if !std::path::Path::new(&bf).exists() {
+                std::fs::create_dir(bf).unwrap();
+            }
+
+            let mut file = File::create(&format!("{bf}{name}.ssa")).or(Err(error_orphan!("Could not create qbe output file")))?;
             let _ = write!(file, "{}", generator.generated_mod.output);
 
             // .ssa -> .s
             let qbe_path = options.qbe_path.clone().unwrap_or("qbe".to_string());
-            if options.verbose_shell { println!("[CMD] {qbe_path} {name}.ssa -o {name}.s") }
+            if options.verbose_shell { println!("[CMD] {qbe_path} {bf}{name}.ssa -o {bf}{name}.s") }
             if !Command::new(&qbe_path)
-                .arg(&format!("{name}.ssa"))
+                .arg(&format!("{bf}{name}.ssa"))
                 .arg("-o")
-                .arg(&format!("{name}.s"))
+                .arg(&format!("{bf}{name}.s"))
                 .status()
                 .expect("ERROR: qbe not found")
                 .success()
@@ -1707,10 +1712,12 @@ impl Compiletime {
 
             // .s -> .o
             let assembler_path = options.assembler_path.clone().unwrap_or("cc".to_string());
-            if options.verbose_shell { println!("[CMD] {assembler_path} -c {name}.s") }
+            if options.verbose_shell { println!("[CMD] {assembler_path} -c {bf}{name}.s -o {bf}{name}.o") }
             if !Command::new(&assembler_path)
                 .arg("-c")
-                .arg(&format!("{name}.s"))
+                .arg(&format!("{bf}{name}.s"))
+                .arg("-o")
+                .arg(&format!("{bf}{name}.o"))
                 .status()
                 .expect("ERROR: qbe not found")
                 .success()
@@ -1719,7 +1726,7 @@ impl Compiletime {
             }
 
             if !options.emit_qbe {
-                let path = format!("{name}.ssa");
+                let path = format!("{bf}{name}.ssa");
                 if options.verbose_shell { println!("[CMD] rm {path}") }
                 if !Command::new("rm")
                     .arg(&path)
@@ -1732,7 +1739,7 @@ impl Compiletime {
             }
 
             if !options.emit_assembly {
-                let path = format!("{name}.s");
+                let path = format!("{bf}{name}.s");
                 if options.verbose_shell { println!("[CMD] rm {path}") }
                 if !Command::new("rm")
                     .arg(&path)
@@ -1744,7 +1751,7 @@ impl Compiletime {
                 }
             }
 
-            objs.push(format!("{name}.o"));
+            objs.push(format!("{bf}{name}.o"));
             self.add_module(generator.generated_mod.name, generator.decorated_mod.parse_module.function_map);
         }
 
