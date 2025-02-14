@@ -1,19 +1,7 @@
 module hello;
 
 import std::io;
-import libc::io;
-import libc::mem;
 
 main :: fn() {
-    let n: usize = 1024;
-    let buf: *u8 = mem::malloc(n);
-    let len = libc::io::read(0, buf, n);
-    if len < 0 {
-        std::io::println("An error occurred");
-    } else {
-        let s: str = {buf, len};
-        std::io::print("got a string: `");
-        std::io::print(s);
-        std::io::println("`");
-    }
+    io::println("Hello world");
 }
