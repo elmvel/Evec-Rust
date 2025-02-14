@@ -50,3 +50,4 @@
 ../target/debug/main ./cast.eve && ./b.out
 ../target/debug/main ./implicit.eve && ./b.out
 ../target/debug/main ./implicit2.eve && ./b.out
+../target/debug/main ./slice_init_list.eve && ./b.out

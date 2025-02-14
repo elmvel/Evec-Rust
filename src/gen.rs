@@ -1452,7 +1452,7 @@ function l $.slice.len(l %slc) {{
                     Err(error!(token.loc(), "Cannot infer type of null pointer"))
                 }
             },
-            Expr::InitList(token, exprs) => {
+            Expr::InitList(token, mut exprs) => {
                 if let Some(mut typ) = expected_type {
                     if typ.kind != TypeKind::Structure {
                         return Err(error!(token.loc(), "Cannot initialize {typ} with initializer list"));
@@ -1501,6 +1501,37 @@ function l $.slice.len(l %slc) {{
                                 self.store_type(&val.typ, val.tag, format!("%.s{ptr}"));
                             }
                             Ok(StackValue{tag, typ})
+                        },
+                        StructKind::Slice => {
+                            if exprs.len() != 2 {
+                                return Err(error!(token.loc(), "Need exactly 2 arguments to initialize slice: {{ptr, len}}"));
+                            }
+                            let Some(ref inner) = typ.inner else { unreachable!() };
+                            let ptr_loc = exprs[0].loc();
+                            let len_loc = exprs[1].loc();
+                            let expr_1 = exprs.pop().unwrap();
+                            let expr_0 = exprs.pop().unwrap();
+                            let ptr = self.emit_expr(comptime, expr_0, Some(*inner.clone()))?;
+                            let len = self.emit_expr(comptime, expr_1, None)?;
+                            if !ptr.typ.is_ptr() {
+                                return Err(error!(ptr_loc, "Expected pointer for first field of slice"));
+                            }
+                            let mut deref = ptr.typ.deref();
+                            if !deref.soft_equals(inner) {
+                                return Err(error!(ptr_loc, "Expected type of {typ}, got type of {} instead", (ptr.typ)));
+                            }
+                            if len.typ.assert_number(len_loc).is_err() {
+                                return Err(error!(ptr_loc, "Expected number for second field of slice"));
+                            }
+                            let long = self.extend_to_long(len.tag, &len.typ);
+
+                            let tag = self.ctx.alloc();
+                            let offset = self.ctx.alloc();
+                            genf!(self, "%.s{tag} =l alloc8 16");
+                            genf!(self, "storel %.s{ptr}, %.s{tag}");
+                            genf!(self, "%.s{offset} =l add %.s{tag}, 8");
+                            genf!(self, "storel %.s{long}, %.s{offset}");
+                            Ok(StackValue{tag, typ: Type::wrap(*inner.clone(), StructKind::Slice, None, false)})
                         },
                         _ => return Err(error!(token.loc(), "Cannot initialize {typ} with initializer list")),
                     }

@@ -1,0 +1,12 @@
+module hello;
+
+import std::io;
+
+strlen :: fn(c: cstr) -> usize #extern("strlen");
+
+main :: fn() {
+    let c: cstr = c"Hello!";
+    let len = strlen(c);
+    let s: str = {c, len};
+    io::print(s);
+}

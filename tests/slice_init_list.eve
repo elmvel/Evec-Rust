@@ -1,0 +1,9 @@
+module hello;
+
+import std::io;
+
+main :: fn() {
+    let c: cstr = c"Hello!\n";
+    let s: str = {c, 7};
+    io::print(s);
+}
