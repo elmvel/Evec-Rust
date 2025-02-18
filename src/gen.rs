@@ -11,6 +11,7 @@ use crate::parser::Result;
 use crate::decorator::DecoratedModule;
 use crate::ast::*;
 use crate::errors::SyntaxError;
+use crate::constants::MODULE_SEPARATOR;
 
 // Valid for Generator methods
 macro_rules! genf {
@@ -187,7 +188,7 @@ pub fn path_to_string(expr: Expr) -> String {
         Expr::Ident(Token::Ident(_, text)) => text,
         Expr::Path(Token::Ident(_, text), box_expr) => {
             let mut t = text.clone();
-            t.push_str("__");
+            t.push_str(MODULE_SEPARATOR);
             t.push_str(&path_to_string(*box_expr));
             t
         },
@@ -196,12 +197,12 @@ pub fn path_to_string(expr: Expr) -> String {
 }
 
 fn get_module_name(s: String) -> String {
-    let Some(idx) = s.rfind("__") else { unreachable!() };
+    let Some(idx) = s.rfind(MODULE_SEPARATOR) else { unreachable!() };
     s[..idx].to_string()
 }
 
 fn get_func_name(s: String) -> String {
-    let Some(i) = s.rfind("__") else { unreachable!() };
+    let Some(i) = s.rfind(MODULE_SEPARATOR) else { unreachable!() };
     let idx = i + 2;
     s[idx..].to_string()
 }

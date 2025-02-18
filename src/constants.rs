@@ -1,0 +1,4 @@
+use std::sync::RwLock;
+
+pub const MODULE_SEPARATOR: &str = "__";
+pub static STD_LIB_PATH: RwLock<&str> = RwLock::new("../std/");

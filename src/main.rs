@@ -2,11 +2,13 @@
 
 use std::process::ExitCode;
 use std::path::{Path, PathBuf};
+use std::sync::RwLock;
 
 use crate::lexer::Lexer;
 use crate::parser::Parser;
 use crate::decorator::Decorator;
 use crate::gen::Compiletime;
+use crate::constants::STD_LIB_PATH;
 
 #[macro_use] 
 mod error_macro;
@@ -17,6 +19,7 @@ mod parser;
 mod decorator;
 mod errors;
 mod gen;
+mod constants;
 
 // https://matklad.github.io/2020/04/13/simple-but-powerful-pratt-parsing.html
 
@@ -126,7 +129,10 @@ fn main() -> ExitCode {
 }
 
 fn fetch_stdlib(input_paths: &mut Vec<String>) {
-    let mut paths = std::fs::read_dir("../std/").unwrap()
+    let mut paths = std::fs::read_dir(*STD_LIB_PATH.read().unwrap()).map_err(|e| {
+        eprintln!("ERROR: Could not find the standard library at path: {}", *STD_LIB_PATH.read().unwrap());
+        std::process::exit(1);
+    }).unwrap()
         .map(|de| de.unwrap().path())
         .collect::<Vec<PathBuf>>();
     while !paths.is_empty() {
