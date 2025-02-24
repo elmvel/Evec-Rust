@@ -43,6 +43,7 @@ struct BuildOptions {
     emit_assembly: bool,
     compile_only: bool,
     verbose_shell: bool,
+    debug_info: bool,
     output_name: Option<String>,
     assembler_path: Option<String>,
     linker_path: Option<String>,
@@ -95,6 +96,7 @@ fn main() -> ExitCode {
             },
             "-c" => options.compile_only = true,
             "-vs" | "--verbose-shell" => options.verbose_shell = true,
+            "-g" => options.debug_info = true,
             "--assembler" => {
                 expect_argument!(args, arg, options.assembler_path);
             },
