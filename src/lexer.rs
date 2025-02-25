@@ -239,7 +239,7 @@ impl Lexer {
                 },
                 'a'..='z' | 'A'..='Z' | '_' => {
                     let n: String = iter::once(ch)
-                        .chain(from_fn(|| iter.by_ref().next_if(|s| s.is_ascii_alphanumeric())))
+                        .chain(from_fn(|| iter.by_ref().next_if(|s| s.is_ascii_alphanumeric() || *s == '_')))
                         .collect::<String>();
 
                     let loc = Location::new(input_path.into(), line, col);

@@ -2,6 +2,10 @@ module hello;
 
 import std::io;
 
+__foo_bar :: fn() {
+    io::println("foo!");
+}
+
 main :: fn() {
-    io::println("Hello world");
+    __foo_bar();
 }
