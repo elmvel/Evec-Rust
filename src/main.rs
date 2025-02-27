@@ -9,6 +9,7 @@ use crate::parser::Parser;
 use crate::decorator::Decorator;
 use crate::gen::Compiletime;
 use crate::constants::STD_LIB_PATH;
+use crate::target::*;
 
 #[macro_use] 
 mod error_macro;
@@ -20,6 +21,7 @@ mod decorator;
 mod errors;
 mod gen;
 mod constants;
+mod target;
 
 // https://matklad.github.io/2020/04/13/simple-but-powerful-pratt-parsing.html
 
@@ -43,12 +45,14 @@ struct BuildOptions {
     emit_assembly: bool,
     compile_only: bool,
     verbose_shell: bool,
+    verbose: bool,
     debug_info: bool,
     output_name: Option<String>,
     assembler_path: Option<String>,
     linker_path: Option<String>,
     linker_arguments: Vec<String>,
     qbe_path: Option<String>,
+    target: Target,
 }
 
 // TODO: handle multiple source files even though we technically take in a vector
@@ -96,7 +100,14 @@ fn main() -> ExitCode {
             },
             "-c" => options.compile_only = true,
             "-vs" | "--verbose-shell" => options.verbose_shell = true,
-            "-g" => options.debug_info = true,
+            "-v" | "--verbose" => options.verbose = true,
+            "-g" => {
+                if !options.target.can_debug_info() {
+                    eprintln!("error: Backend {} does not support debug information.", options.target.backend());
+                    std::process::exit(1);
+                }
+                options.debug_info = true;
+            },
             "--assembler" => {
                 expect_argument!(args, arg, options.assembler_path);
             },
@@ -113,6 +124,22 @@ fn main() -> ExitCode {
             "-Q" | "--qbe-path" => {
                 expect_argument!(args, arg, options.qbe_path);
             },
+            "--backend" => {
+                let backend;
+                expect_argument!(args, arg, backend);
+                if let Some(b) = backend {
+                    match b.as_str() {
+                        "qbe" | "QBE" => options.target.set_backend(Backend::Qbe),
+                        "llvm" | "LLVM" => options.target.set_backend(Backend::Llvm),
+                        "c" | "C" => options.target.set_backend(Backend::C),
+                        _ => {
+                            eprintln!("error: Unknown backend '{b}'.");
+                            eprintln!("Known backends are: qbe, llvm, c.");
+                            std::process::exit(1);
+                        },
+                    }
+                }
+            },
             arg => input_paths.push(arg.to_string()),
         }
     }
@@ -124,6 +151,17 @@ fn main() -> ExitCode {
 
     fetch_stdlib(&mut input_paths);
 
+    if options.target.backend() != Backend::Qbe {
+        todo!("Handling other backends are not supported yet! I need to add infrastructure in ir.rs");
+    }
+    if options.verbose {
+        println!(
+            "Targetting {}-{}, using the {} backend.",
+            options.target.os(),
+            options.target.arch(),
+            options.target.backend(),
+        );
+    }
     match entry(input_paths, options) {
         Ok(_) => ExitCode::SUCCESS,
         Err(_) => ExitCode::FAILURE,
