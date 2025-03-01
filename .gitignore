@@ -5,3 +5,4 @@
 /src/out.ssa
 /tests/b.out
 /src/.build/
+/tests/.build/
