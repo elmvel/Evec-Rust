@@ -1,49 +1,75 @@
 use std::collections::{HashMap, HashSet};
-use std::fmt::{self, Write};
-use std::io::Write as IoWrite;
+use std::fmt::Write;
 use std::fs::File;
 use std::process::Command;
+use std::io::Write as IoWrite;
 
 use crate::BuildOptions;
 use crate::lexer::{Token, Location};
-use crate::parser::ParseModule;
 use crate::parser::Result;
-use crate::decorator::DecoratedModule;
 use crate::ast::*;
+use crate::decorator::DecoratedModule;
 use crate::errors::SyntaxError;
+use crate::ir::*;
 use crate::constants::MODULE_SEPARATOR;
 
-// Valid for Generator methods
+type Module = HashMap<String, FunctionDecl>;
+type SymbolTable = HashMap<String, TempValue>;
+
+////////////////////// GENERATOR MACROS //////////////////////
+
 macro_rules! genf {
     ($gen:expr, $($l:tt),+) => {
-        $gen.writeln(&format!($($l),+));
+        let _ = writeln!($gen.generated_mod.output, "{}", &format!($($l),+));
     }
 }
 
 macro_rules! gen {
     ($gen:expr, $($l:tt),+) => {
-        $gen.write(&format!($($l),+));
+        let _ = write!($gen.generated_mod.output, "{}", &format!($($l),+));
     }
 }
 
-type Module = HashMap<String, FunctionDecl>;
-
-/////////// Bookkeeping ////////////////
-
-// Might need to be an enum at some point for other "values"
-#[derive(Clone, Debug)]
-struct StackValue {
-    typ: Type,
-    tag: usize,
-}
-
-impl fmt::Display for StackValue {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.tag)
+macro_rules! temp [
+    ($tag:expr, $typ:expr) => {
+        TempValue{tag: $tag, typ: $typ}
     }
-}
+];
 
-type SymbolTable = HashMap<String, StackValue>;
+macro_rules! label [
+    ($($l:tt),+) => {
+        Value::Label(format!($($l),+))
+    }
+];
+
+// A lot of clones, but it's tedious to care about each and every clone
+// Owns dst_typ
+macro_rules! load (
+    ($gen:expr, $dst_typ:expr, $tv:expr) => {
+        {
+            let tag = $gen.ctx.alloc();
+            let typ: Type = $dst_typ;
+            $gen.block_add_assign(temp![tag, $dst_typ], Instruction::Load(Value::Temp($tv.clone()), typ.clone()))
+        }
+    }
+);
+
+// Doesn't own any
+macro_rules! array_offset (
+    ($gen:expr, $tv:expr, $typ:expr, $i:expr) => {
+        {
+            let btag = $gen.ctx.alloc();
+            let ptr = $gen.ctx.alloc();
+            let bytes = $i * $typ.sizeof();
+
+            let btv = $gen.block_add_assign(temp![btag, TypeKind::U64.into()], Instruction::Copy(Value::Constant(format!("{bytes}"))));
+            let ptv = $gen.block_add_assign(temp![ptr, $typ.ptr()], Instruction::Add(Value::Temp($tv.clone()), Value::Temp(btv)));
+            ptv
+        }
+    }
+);
+
+////////////////////// GENERATOR //////////////////////
 
 #[derive(Default)]
 struct StackFrame {
@@ -51,11 +77,11 @@ struct StackFrame {
 }
 
 impl StackFrame {
-    pub fn symtab_store(&mut self, name: String, val: StackValue) {
+    pub fn symtab_store(&mut self, name: String, val: TempValue) {
         self.var_table.insert(name, val);
     }
 
-    pub fn symtab_lookup(&mut self, name: &str, loc: Location) -> Result<StackValue> {
+    pub fn symtab_lookup(&mut self, name: &str, loc: Location) -> Result<TempValue> {
         self.var_table.get(name).cloned().ok_or(error!(loc, "No variable exists of name '{name}'"))
     }
 }
@@ -118,7 +144,7 @@ impl FunctionContext {
         self.loop_tracker > 0
     }
 
-    pub fn lookup(&mut self, name: &str, loc: Location) -> Result<StackValue> {
+    pub fn lookup(&mut self, name: &str, loc: Location) -> Result<TempValue> {
         for frame in self.frames.iter_mut().rev() {
             let result = frame.symtab_lookup(name, loc.clone());
             if result.is_ok() {
@@ -143,29 +169,6 @@ impl FunctionDecl {
     }
 }
 
-/////////// Runtime ////////////////
-
-pub struct Compiletime {
-    module_map: HashMap<String, Module>,
-    method_map: HashMap<Type, HashMap<String, FunctionDecl>>,
-    main_defined: bool,
-}
-
-impl Compiletime {
-    pub fn add_module(&mut self, name: String, module: Module) {
-        if self.module_map.get(&name).is_some() {
-            self.module_map.get_mut(&name).unwrap().extend(module.into_iter());
-        } else {
-            self.module_map.insert(name, module);
-        }
-    }
-    
-    pub fn get_module(&self, path: Expr) -> Option<&Module> {
-        let s = path_to_string(path);
-        self.module_map.get(&s)
-    }
-}
-
 #[derive(Default)]
 struct GeneratedModule {
     name: String,
@@ -181,6 +184,10 @@ struct Generator {
     expected_return: Type,
     strings: Vec<String>,
     cstrings: Vec<String>,
+    
+    // IR
+    toplevels: Vec<TopLevel>,
+    working_blocks: Vec<Block>,
 }
 
 pub fn path_to_string(expr: Expr) -> String {
@@ -207,6 +214,7 @@ fn get_func_name(s: String) -> String {
     s[idx..].to_string()
 }
 
+// I don't know how to escape this macro, the logic is complex but must be repeated
 macro_rules! gen_funcall_from_funcdef {
     ($slf:expr, $comptime:expr, $modname:expr, $def:expr, $text:expr, $args:expr, $loc:expr) => {
         if $def.is_some() {
@@ -216,7 +224,7 @@ macro_rules! gen_funcall_from_funcdef {
             let tag = $slf.ctx.alloc();
             let txt = $text;
             let ret_type = def.ret_type.clone().unwrap_or(TypeKind::Void.into());
-            let qt = ret_type.qbe_abi_type();
+            //let qt = ret_type.qbe_abi_type();
 
             let arglen = $args.len();
             if arglen != parlen {
@@ -241,25 +249,18 @@ macro_rules! gen_funcall_from_funcdef {
 
             if def.extern_name.is_some() {
                 let extrn_name = def.extern_name.clone().unwrap();
-                gen!($slf, "%.s{tag} ={qt} call ${extrn_name}(");
+                let tv = $slf.block_add_assign(
+                    temp![tag, ret_type],
+                    Instruction::Call(Value::Global(extrn_name), stack_values)
+                );
+                Ok(tv)
             } else {
-                gen!($slf, "%.s{tag} ={qt} call ${}.{txt}(", $modname);
+                let tv = $slf.block_add_assign(
+                    temp![tag, ret_type],
+                    Instruction::Call(Value::Global(format!("{}.{txt}", $modname)), stack_values)
+                );
+                Ok(tv)
             }
-
-            // Emit arguments
-            gen!($slf, "{}", (stack_values
-                              .iter()
-                              .map(|StackValue{tag, typ}| {
-                                  let qtype = typ.qbe_ext_type();
-                                  format!("{qtype} %.s{tag}")
-                              })
-                              .collect::<Vec<String>>()
-                              .join(", ")
-            ));
-            genf!($slf, ")");
-
-            Ok(StackValue{tag, typ: ret_type})
-            //Ok(StackValue{tag, typ: Type::Void})
         } else {
             let txt = $text;
             return Err(error!($loc, "Could not find function '{txt}'"));
@@ -279,17 +280,18 @@ impl Generator {
             expected_return: TypeKind::Void.into(),
             strings: Vec::new(),
             cstrings: Vec::new(),
+            toplevels: Vec::new(),
+            working_blocks: Vec::new(),
         };
         gen.generated_mod.name = name;
         gen
     }
 
-    fn write(&mut self, text: &str) {
-        let _ = write!(self.generated_mod.output, "{text}");
-    }
-
-    fn writeln(&mut self, text: &str) {
-        let _ = writeln!(self.generated_mod.output, "{text}");
+    // Dump after all AST converted to IR
+    fn dump(&mut self) {
+        for toplevel in &self.toplevels {
+            genf!(self, "{toplevel}");
+        }
     }
 
     fn current_frame(&mut self) -> Result<&mut StackFrame> {
@@ -333,17 +335,59 @@ impl Generator {
         let name = &matches[0];
         Some((comptime.module_map.get(name)?, matches.remove(0)))
     }
-
-    fn import(&mut self, comptime: &Compiletime, modname: &str) {
-        
+    
+    fn start_block(&mut self, text: &str) {
+        let name = Value::Label(text.to_string());
+        self.working_blocks.push(Block{name, stmts: Vec::new(), dead: false});
     }
 
-    fn emit_types(&mut self, comptime: &mut Compiletime) -> Result<()> {
+    fn current_block(&mut self) -> &mut Block {
+        self.working_blocks.last_mut().unwrap()
+    }
+    
+    fn drain_blocks(&mut self) -> Vec<Block> {
+        self.working_blocks.drain(..).collect()
+    }
+    
+    // Construct the temp value in tv, and then we give it back to you
+    fn block_add_assign(&mut self, tv: TempValue, instr: Instruction) -> TempValue {
+        self.current_block().stmts.push(Statement::Assignment(tv.clone(), instr));
+        tv
+    }
+
+    fn block_add_discard(&mut self, instr: Instruction) {
+        self.current_block().stmts.push(Statement::Discard(instr));
+    }
+    
+    fn block_add_raw(&mut self, text: String) {
+        self.current_block().stmts.push(Statement::Raw(text));
+    }
+
+    fn get_indexable_ptr(&mut self, val: &TempValue) -> usize {
+        if val.typ.is_ptr() {
+            return val.tag;
+        }
+        if !val.typ.is_struct() {
+            unreachable!("Must be a structure if not a pointer");
+        }
+        match val.typ.struct_kind {
+            StructKind::Array => val.tag,
+            StructKind::Slice => {
+                let tag = self.ctx.alloc();
+                let tv = self.block_add_assign(temp![tag, TypeKind::U64.into()], Instruction::Load(Value::Temp(val.clone()), TypeKind::U64.into()));
+                tv.tag
+            },
+            _ => unreachable!("unreachable unless if we support operator overloading"),
+        }
+    }
+
+    pub fn emit_types(&mut self, comptime: &mut Compiletime) {
+        // TODO: use toplevels instead
         genf!(self, "type :slice = {{ l, l }}");
-        Ok(())
     }
 
     fn emit_builtin_methods(&mut self, comptime: &mut Compiletime) -> Result<()> {
+        // TODO: use toplevels instead
         genf!(
             self,
 r#"
@@ -370,8 +414,6 @@ function l $.slice.len(l %slc) {{
         Ok(())
     }
 
-    // This is necessary for built-ins, which may vary slightly but share the same structure
-    // Currently this only applies to slices
     fn type_to_builtin_check(typ: &Type) -> Type {
         if typ.is_struct() {
             match typ.struct_kind {
@@ -382,7 +424,7 @@ function l $.slice.len(l %slc) {{
             return typ.clone();
         }
     }
-    
+
     fn escape_string(mut text: &str) -> (String, usize) {
         let mut buf = String::new();
         let mut len = 0;
@@ -420,7 +462,7 @@ function l $.slice.len(l %slc) {{
         (buf, len)
     }
 
-    fn emit_strings(&mut self) -> Result<()> {
+    fn emit_strings(&mut self) {
         let mut c = 0;
         self.strings.reverse();
         while !self.strings.is_empty() {
@@ -429,10 +471,9 @@ function l $.slice.len(l %slc) {{
             genf!(self, "data $.str{c} = {{ l $.str.data{c}, l {} }}", len);
             c += 1;
         }
-        Ok(())
     }
 
-    fn emit_c_strings(&mut self) -> Result<()> {
+    fn emit_c_strings(&mut self) {
         let mut c = 0;
         self.cstrings.reverse();
         while !self.cstrings.is_empty() {
@@ -440,12 +481,10 @@ function l $.slice.len(l %slc) {{
             genf!(self, "data $.cstr{c} = {{ b \"{cstring}\", b 0 }}");
             c += 1;
         }
-        Ok(())
     }
-
+    
     pub fn emit(&mut self, comptime: &mut Compiletime) -> Result<()> {
-        // TODO: set the name field of the gen module
-        self.writeln("# QBE Start");
+        genf!(self, "# QBE Start");
         genf!(self, "data $fmt_d = {{ b \"%d\\n\", b 0 }}");
         genf!(self, "data $fmt_ll = {{ b \"%lld\\n\", b 0 }}");
         genf!(self, "data $fmt_bool = {{ b \"bool: %d\\n\", b 0 }}");
@@ -453,21 +492,28 @@ function l $.slice.len(l %slc) {{
         genf!(self, "data $fmt_arr_start = {{ b \"{{\\n\", b 0 }}");
         genf!(self, "data $fmt_arr_end = {{ b \"}}\\n\", b 0 }}");
 
-        self.emit_types(comptime)?;
-        self.emit_builtin_methods(comptime)?;
-        
+        self.emit_types(comptime);
+        self.emit_builtin_methods(comptime);
+
         self.decorated_mod.parse_module.globals.reverse();
         while !self.decorated_mod.parse_module.globals.is_empty() {
             let global = self.decorated_mod.parse_module.globals.pop().unwrap();
-            self.emit_global(comptime, global)?;
+            // Collect the AST as IR
+            let result = self.emit_global(comptime, global)?;
+            if let Some(toplevel) = result {
+                self.toplevels.push(toplevel);
+            }
         }
 
-        self.emit_strings()?;
-        self.emit_c_strings()?;
+        self.emit_strings();
+        self.emit_c_strings();
+        genf!(self, "");
+        
+        self.dump(); // Emit IR into the backend 
         Ok(())
     }
 
-    pub fn emit_global(&mut self, comptime: &mut Compiletime, global: Global) -> Result<()> {
+    pub fn emit_global(&mut self, comptime: &mut Compiletime, global: Global) -> Result<Option<TopLevel>> {
         match global {
             Global::Decl(name, expr) => {
                 match expr {
@@ -476,12 +522,10 @@ function l $.slice.len(l %slc) {{
                             return Err(error!(fn_.loc(), "This function does not always return, but should return {}", (ret_type.unwrap())));
                         }
                         let Token::Ident(_, text) = name.clone() else { unreachable!() };
-                        // TODO IMPORTANT: was this necessary?
-                        //self.func_map().insert(text.clone(), FunctionDecl::new(text));
-                        self.emit_function(comptime, params, ret_type, name, stmts, attrs)
+                        Ok(Some(self.emit_function(comptime, params, ret_type, name, stmts, attrs)?))
                     },
                     Expr::FuncDecl(fn_, params, ret_type, _) => {
-                        Ok(())
+                        Ok(None)
                     },
                     _ => return Err(error!(name.loc(), "Only global functions are supported for now!")),
                 }
@@ -494,17 +538,16 @@ function l $.slice.len(l %slc) {{
                     return Err(error!(loc, "Module `{modname}` does not exist!"));
                 }
                 self.imports.insert(modname);
-                Ok(())
+                Ok(None)
             },
             g => Err(error_orphan!("Unknown global {g:?}"))
         }
     }
 
-    pub fn emit_function(&mut self, comptime: &mut Compiletime, params: Vec<Param>, ret_type: Option<Type>, name: Token, mut stmts: Vec<Stmt>, attrs: Vec<Attribute>) -> Result<()> {
-        let Token::Ident(loc, text2) = name else {
-            unreachable!("must have an ident here")
-        };
-
+    pub fn emit_function(&mut self, comptime: &mut Compiletime, params: Vec<Param>, ret_type: Option<Type>, name: Token, mut stmts: Vec<Stmt>, attrs: Vec<Attribute>) -> Result<TopLevel> {
+        let Token::Ident(loc, text2) = name else { unreachable!() };
+        
+        // Resolve function attributes
         let mut extern_name = None;
         for attr in attrs {
             match attr {
@@ -516,88 +559,62 @@ function l $.slice.len(l %slc) {{
             }
         }
 
+        // Function name
         let text = extern_name.unwrap_or(text2);
 
         self.expected_return = match ret_type {
             Some(ref typ) => typ.clone(),
             None => TypeKind::Void.into(),
         };
-        let qbe_return_type = match ret_type {
-            Some(ref typ) => typ.qbe_ext_type(),
-            None => "",
-        };
-
-        // TODO: clearly define main semantics
-        let mut setting_main = false;
-        if &text == "main" {
+        
+        let setting_main = &text == "main";
+        if setting_main {
             if comptime.main_defined {
                 return Err(error!(loc, "Redefinition of function main!"));
             }
-            gen!(self, "export function w $main(");
-            let mut hack = 0;
-            gen!(self, "{}", (params
-                  .iter()
-                  .map(|Param(tag, typ)| {
-                      let f = format!("{} %.s{hack}", typ.qbe_ext_type());
-                      hack += 1;
-                      f
-                  })
-                  .collect::<Vec<String>>()
-                  .join(", "))
-            );
-            genf!(self, ") {{\n@start");
-            comptime.main_defined = true;
-            setting_main = true;
 
-            // Hack 2
+            // Hack 2: let the ast know which returns are in main
             for stmt in &mut stmts {
                 match stmt {
                     Stmt::Return(_, _, ref mut is_main, _) => *is_main = true,
                     _ => ()
                 }
             }
-        } else {
-            gen!(self, "export function {qbe_return_type} ${}.{text}(", (self.generated_mod.name));
-            let mut hack = 0;
-            gen!(self, "{}", (params
-                  .iter()
-                  .map(|Param(tag, typ)| {
-                      let f = format!("{} %.s{hack}", typ.qbe_ext_type());
-                      hack += 1;
-                      f
-                  })
-                  .collect::<Vec<String>>()
-                  .join(", "))
-            );
-            genf!(self, ") {{\n@start");
         }
-
+        
+        // Reset function context
         self.ctx = FunctionContext::default();
 
         // Add all parameters to symbol table
         let mut prelude = StackFrame::default();
-        for Param(token, typ) in params {
+        for Param(token, typ) in &params {
             let Token::Ident(_, text) = token else { unreachable!() };
             let tag = self.ctx.alloc();
-            prelude.symtab_store(text, StackValue{tag, typ});
+            prelude.symtab_store(text.clone(), temp![tag, typ.clone()]);
         }
         
+        // TODO: IMPORTANT: Need to redo the return evaluation
         
-        if ret_type.is_none() {
+        // NOTE: this does not follow the return semantic, as we will always have a working "block"
+        self.start_block("start");
+        if ret_type.is_none() { // TODO: double check hack
             stmts.push(Stmt::Return(ldef!(), None, setting_main, false));
         }
         self.emit_stmts(comptime, stmts, Some(prelude))?;
-        if ret_type.is_some() {
-            genf!(self, "ret 0");
+        if ret_type.is_some() { // TODO: double check hack
+            // genf!(self, "ret 0"); //TODO I guess we didn't need this? return needs to be analyzed badly
         }
-        
-        genf!(self, "}}");
+
+        // Reset expected_return (TODO: see if this absolutely needs to be here)
         self.expected_return = TypeKind::Void.into();
-        Ok(())
+        if setting_main {
+            Ok(TopLevel::Function(text, params, ret_type, self.drain_blocks(), setting_main))
+        } else {
+            Ok(TopLevel::Function(format!("{}.{text}", self.generated_mod.name), params, ret_type, self.drain_blocks(), setting_main))
+        }
     }
 
     pub fn emit_stmts(&mut self, comptime: &mut Compiletime, stmts: Vec<Stmt>, prelude: Option<StackFrame>) -> Result<()> {
-        // TODO: handle stack frames in here
         match prelude {
             Some(frame) => self.ctx.frames.push(frame),
             None => self.push_frame(),
@@ -608,41 +625,46 @@ function l $.slice.len(l %slc) {{
             if let Stmt::Return(_, _, _, _) = stmt {
                 let mut copied = deferred.clone();
                 for stmt in copied.drain(..).rev() {
+                    if self.current_block().dead { // Reset if we have returned out of it
+                        let s = self.ctx.stopper();
+                        self.start_block(&format!("BLK{s}"));
+                    }
                     self.emit_stmt(comptime, stmt, &mut none)?;
                 }
             }
             let mut opt: Option<&mut Vec<Stmt>>  = Some(&mut deferred);
+            if self.current_block().dead { // Reset if we have returned out of it
+                let s = self.ctx.stopper();
+                self.start_block(&format!("BLK{s}"));
+            }
             self.emit_stmt(comptime, stmt, &mut opt)?;
         }
         self.pop_frame();
         Ok(())
     }
-    
-    fn tag_offset(&mut self, tag: usize, typ: &Type, offset: usize) -> usize {
-        let btag = self.ctx.alloc();
-        let ptr = self.ctx.alloc();
-        let bytes = offset * typ.sizeof();
-        
-        genf!(self, "%.s{btag} =l copy {bytes}");
-        genf!(self, "%.s{ptr} =l add %.s{tag}, %.s{btag}");
-        ptr
-    }
-    
-    fn dbg_print_val(&mut self, comptime: &mut Compiletime, val: StackValue) -> Result<()> {
+
+    fn dbg_print_val(&mut self, comptime: &mut Compiletime, val: TempValue) -> Result<()> {
+        // todo!("Let the IR support raw qbe IR");
         if val.typ.is_ptr() {
-            genf!(self, "%.void =w call $printf(l $fmt_ptr, ..., l %.s{})", val);
+            self.block_add_raw(format!("%.void =w call $printf(l $fmt_ptr, ..., l %.{})", val))
         } else {
             match val.typ.kind {
                 TypeKind::U64 | TypeKind::S64 => {
-                    genf!(self, "%.void =w call $printf(l $fmt_ll, ..., l %.s{})", val);
+                    self.block_add_raw(format!("%.void =w call $printf(l $fmt_ll, ..., l %.{})", val));
                 },
                 TypeKind::U32 | TypeKind::U16 | TypeKind::U8 |
                 TypeKind::S32 | TypeKind::S16 | TypeKind::S8 => {
-                    let tag = self.extend_to_long(val.tag, &val.typ);
-                    genf!(self, "%.void =w call $printf(l $fmt_d, ..., w %.s{})", tag);
+                    //let tag = self.extend_to_long(val.tag, &val.typ);
+                    // TODO: incorrect output
+                    let tag = self.ctx.alloc();
+                    let tv = self.block_add_assign(
+                        temp![tag, TypeKind::U64.into()],
+                        Instruction::Cast(Value::Temp(val.clone()), TypeKind::U64.into(), val.typ.clone())
+                    );
+                    self.block_add_raw(format!("%.void =w call $printf(l $fmt_d, ..., w %.{})", tv));
                 },
                 TypeKind::Bool => {
-                    genf!(self, "%.void =w call $printf(l $fmt_bool, ..., w %.s{})", val);
+                    self.block_add_raw(format!("%.void =w call $printf(l $fmt_bool, ..., w %.{})", val));
                 },
                 TypeKind::Void => unreachable!(),
                 TypeKind::Unresolved => unreachable!(),
@@ -651,26 +673,37 @@ function l $.slice.len(l %slc) {{
                         StructKind::Array => {
                             let Some(ref inner) = val.typ.inner else { unreachable!() };
 
-                            genf!(self, "%.void =w call $printf(l $fmt_arr_start, ...)");
+                            self.block_add_raw(format!("%.void =w call $printf(l $fmt_arr_start, ...)"));
                             for i in 0..val.typ.elements {
-                                let ptr = self.tag_offset(val.tag, inner, i);
-                                let tag = self.load_type(inner, val.tag, format!("%.s{ptr}"));
-                                self.dbg_print_val(comptime, StackValue{tag, typ: *val.typ.inner.clone().unwrap()});
+                                let ptr = array_offset!(self, val, inner, i);
+                                let tag = self.ctx.alloc();
+                                let tv = self.block_add_assign(
+                                    temp![tag, *val.typ.inner.clone().unwrap()],
+                                    Instruction::Load(Value::Temp(ptr.clone()), ptr.typ.clone())
+                                );
+                                self.dbg_print_val(comptime, tv);
                             }
-                            genf!(self, "%.void =w call $printf(l $fmt_arr_end, ...)");
+                            self.block_add_raw(format!("%.void =w call $printf(l $fmt_arr_end, ...)"));
                         },
                         StructKind::Slice => {
                             let sz_offset = self.ctx.alloc();
                             let sz_ptr = self.ctx.alloc();
-                            genf!(self, "%.s{sz_offset} =l copy 8"); // offset(slice.size)
-                            genf!(self, "%.s{sz_ptr} =l add %.s{val}, %.s{sz_offset}"); // &slice.size
-                            let sz = self.load_type(&TypeKind::U64.into(), sz_ptr, format!("%.s{sz_ptr}")); // slice.size
-                            let ptr = self.load_type(&TypeKind::U64.into(), val.tag, format!("%.s{val}")); // slice.size
+                            let sz_offset_tv = self.block_add_assign(
+                                temp![sz_offset, TypeKind::U64.into()],
+                                Instruction::Copy(Value::Constant("8".into()))
+                            );
+                            let sz_ptr_tv = self.block_add_assign(
+                                temp![sz_ptr, TypeKind::U64.into()],
+                                Instruction::Add(Value::Temp(val.clone()), Value::Temp(sz_offset_tv))
+                            );
+                            
+                            let sz_tv = load!(self, TypeKind::U64.into(), sz_ptr_tv);
+                            let ptr_tv = load!(self, TypeKind::U64.into(), val);
 
-                            genf!(self, "%.void =w call $printf(l $fmt_arr_start, ...)");
-                            genf!(self, "%.void =w call $printf(l $fmt_ptr, ..., l %.s{})", ptr);
-                            genf!(self, "%.void =w call $printf(l $fmt_ll, ..., l %.s{})", sz);
-                            genf!(self, "%.void =w call $printf(l $fmt_arr_end, ...)");
+                            self.block_add_raw(format!("%.void =w call $printf(l $fmt_arr_start, ...)"));
+                            self.block_add_raw(format!("%.void =w call $printf(l $fmt_ptr, ..., l %.{})", ptr_tv));
+                            self.block_add_raw(format!("%.void =w call $printf(l $fmt_ll, ..., l %.{})", sz_tv));
+                            self.block_add_raw(format!("%.void =w call $printf(l $fmt_arr_end, ...)"));
                         },
                         _ => todo!("generic printing of structures")
                     }
@@ -680,119 +713,11 @@ function l $.slice.len(l %slc) {{
         Ok(())
     }
 
-    fn load_type(&mut self, typ: &Type, from_tag: usize, from_fmt: String) -> usize {
-        let qtype = typ.qbe_type();
-        if typ.is_struct() {
-            match typ.struct_kind {
-                StructKind::Array => {
-                    let Some(ref inner) = typ.inner else { unreachable!() };
-                    let tag = self.ctx.alloc();
-                    genf!(self, "%.s{tag} ={qtype} copy {from_fmt}"); 
-                    // genf!(self, "%.s{tag}.idx.0 =l copy %.s{tag}");
-                    // for i in 1..typ.elements {
-                    //     let bytes = i * inner.sizeof();
-                    //     genf!(self, "%.s{tag}.idx.{i} =l add %.s{tag}, {bytes}");
-                    // }
-                    tag
-                },
-                StructKind::Slice => {
-                    let tag = self.ctx.alloc();
-                    genf!(self, "%.s{tag} ={qtype} copy {from_fmt}"); 
-                    tag
-                },
-                _ => todo!()
-            }
-        } else {
-            let tag = self.ctx.alloc();
-            // TODO: no floating point is checked here
-            if typ.sizeof() == 8 {
-                genf!(self, "%.s{tag} ={qtype} load{qtype} {from_fmt}");
-            } else {
-                if typ.unsigned() {
-                    genf!(self, "%.s{tag} ={qtype} loadu{qtype} {from_fmt}");
-                } else {
-                    genf!(self, "%.s{tag} ={qtype} loads{qtype} {from_fmt}");
-                }
-            }
-            return tag;
-        }
-    }
-
-    fn store_type(&mut self, typ: &Type, from_tag: usize, to_fmt: String) {
-        if typ.is_struct() {
-            match typ.struct_kind {
-                StructKind::Array => {
-                    let Some(ref inner) = typ.inner else { unreachable!() };
-                    //let tag = self.ctx.alloc();
-                    let bytes = typ.elements * inner.sizeof();
-                    genf!(self, "blit %.s{from_tag}, {to_fmt}, {bytes}");
-                },
-                StructKind::Slice => {
-                    let bytes = typ.sizeof();
-                    genf!(self, "blit %.s{from_tag}, {to_fmt}, {bytes}");
-                },
-                _ => todo!()
-            }
-        } else {
-            let qtype = typ.qbe_type();
-            genf!(self, "store{qtype} %.s{from_tag}, {to_fmt}");
-        }
-    }
-
-    fn extend_to_long(&mut self, tag: usize, typ: &Type) -> usize {
-        match typ.sizeof() {
-            1 => {
-                let t = self.ctx.alloc();
-                if typ.unsigned() {
-                    genf!(self, "%.s{t} =l extub %.s{tag}");
-                } else {
-                    genf!(self, "%.s{t} =l extsb %.s{tag}");
-                }
-                t
-            },
-            2 => {
-                let t = self.ctx.alloc();
-                if typ.unsigned() {
-                    genf!(self, "%.s{t} =l extuh %.s{tag}");
-                } else {
-                    genf!(self, "%.s{t} =l extsh %.s{tag}");
-                }
-                t
-            },
-            4 => {
-                let t = self.ctx.alloc();
-                if typ.unsigned() {
-                    genf!(self, "%.s{t} =l extuw %.s{tag}");
-                } else {
-                    genf!(self, "%.s{t} =l extsw %.s{tag}");
-                }
-                t
-            },
-            _ => tag,
-        }
-    }
-    
-    fn get_indexable_ptr(&mut self, val: &StackValue) -> usize {
-        if val.typ.is_ptr() {
-            return val.tag;
-        }
-        if !val.typ.is_struct() {
-            unreachable!("Must be a structure if not a pointer");
-        }
-        match val.typ.struct_kind {
-            StructKind::Array => val.tag,
-            StructKind::Slice => {
-                self.load_type(&TypeKind::U64.into(), val.tag, format!("%.s{val}"))
-            },
-            _ => unreachable!("unreachable unless if we support operator overloading"),
-        }
-    }
-
     pub fn emit_stmt(&mut self, comptime: &mut Compiletime, stmt: Stmt, deferred: &mut Option<&mut Vec<Stmt>>) -> Result<()> {
         match stmt {
             Stmt::Dbg(expr) => {
-                let val = self.emit_expr(comptime, expr, None)?;
-                self.dbg_print_val(comptime, val);
+                let tv = self.emit_expr(comptime, expr, None)?;
+                self.dbg_print_val(comptime, tv);
                 Ok(())
             },
             Stmt::Let(name, typ, expr) => {
@@ -804,31 +729,32 @@ function l $.slice.len(l %slc) {{
                     allocate = true;
                 }
                 
-                let expr = self.emit_expr(comptime, expr, typ.clone())?;
+                let raw = self.emit_expr(comptime, expr, typ.clone())?;
 
-                let mut val = if allocate {
+                let mut tv = if allocate {
                     let tag = self.ctx.alloc();
-                    // TODO: alignment
-                    genf!(self, "%.s{tag} =l alloc4 {}", (expr.typ.sizeof()));
-                    self.store_type(&expr.typ, expr.tag, format!("%.s{tag}"));
-                    //genf!(self, "store{} %.s{}, %.s{tag}", (expr.typ.qbe_type()), (expr.tag));
-                    StackValue{tag, typ: expr.typ}
+                    let tv_ptr = self.block_add_assign(
+                        temp![tag, raw.typ.ptr()],
+                        Instruction::Alloc(raw.typ.clone())
+                    );
+                    self.block_add_discard(Instruction::Store(Value::Temp(tv_ptr.clone()), Value::Temp(raw.clone()), raw.typ.clone()));
+                    temp![tv_ptr.tag, raw.typ.clone()]
                 } else {
-                    expr
+                    raw
                 };
-                
+
                 if let Some(mut expected_type) = typ {
-                    if !val.typ.soft_equals_array(&mut expected_type) {
-                        return Err(error!(loc, "Expected type {expected_type}, but got {} instead", (val.typ)));
+                    // TODO: refactor type checking
+                    if !tv.typ.soft_equals_array(&mut expected_type) {
+                        return Err(error!(loc, "Expected type {expected_type}, but got {} instead", (tv.typ)));
                     }
                 }
-                
-                // NOTE: This allows shadowing
+
                 let frame = self.current_frame()?;
                 if frame.symtab_lookup(&text, loc.clone()).is_ok() {
                     return Err(error!(loc, "Redefinition of variable {text} is not allowed!"));
                 }
-                frame.symtab_store(text, val);
+                frame.symtab_store(text, tv);
                 Ok(())
             },
             Stmt::Scope(stmts) => {
@@ -842,17 +768,17 @@ function l $.slice.len(l %slc) {{
             Stmt::If(expr, box_stmt, opt_else) => {
                 let val = self.emit_expr(comptime, expr, None)?;
                 let i = self.ctx.label_cond();
-                genf!(self, "jnz %.s{}, @i{i}_body, @i{i}_else", (val.tag));
-                genf!(self, "@i{i}_body");
+                self.block_add_discard(Instruction::Jnz(Value::Temp(val), label!["i{i}_body"], label!["i{i}_else"]));
+                self.start_block(&format!("i{i}_body"));
                 self.emit_stmt(comptime, *box_stmt, deferred)?;
-                genf!(self, "jmp @i{i}_end");
-                genf!(self, "@i{i}_else");
+                self.block_add_discard(Instruction::Jmp(label!["i{i}_end"]));
+                self.start_block(&format!("i{i}_else"));
 
                 if let Some(box_else_block) = opt_else {
                     self.emit_stmt(comptime, *box_else_block, deferred)?;
                 }
 
-                genf!(self, "@i{i}_end");
+                self.start_block(&format!("i{i}_end"));
                 
                 Ok(())
             },
@@ -860,15 +786,15 @@ function l $.slice.len(l %slc) {{
                 self.ctx.loop_push(); // Allow break/continue
                 
                 let p = self.ctx.label_loop();
-                genf!(self, "@p{p}_test");
+                self.start_block(&format!("p{p}_test"));
                 let val = self.emit_expr(comptime, expr, None)?;
-                genf!(self, "jnz %.s{}, @p{p}_body, @p{p}_exit", (val.tag));
+                self.block_add_discard(Instruction::Jnz(Value::Temp(val), label!["p{p}_body"], label!["p{p}_exit"]));
 
-                genf!(self, "@p{p}_body");
+                self.start_block(&format!("p{p}_body"));
                 self.emit_stmt(comptime, *box_stmt, deferred)?;
-                genf!(self, "jmp @p{p}_test");
+                self.block_add_discard(Instruction::Jmp(label!["p{p}_test"]));
                 
-                genf!(self, "@p{p}_exit");
+                self.start_block(&format!("p{p}_exit"));
 
                 self.ctx.loop_pop(); // Disallow break/continue
                 Ok(())
@@ -879,10 +805,10 @@ function l $.slice.len(l %slc) {{
                 if !self.ctx.loop_valid() {
                     return Err(error!(loc, "No body to break out of!"));
                 }
-                genf!(self, "jmp @p{p}_exit");
+                self.block_add_discard(Instruction::Jmp(label!["p{p}_exit"]));
 
                 let s = self.ctx.stopper();
-                genf!(self, "@p{p}_stopper{s}");
+                self.start_block(&format!("p{p}_stopper{s}"));
                 Ok(())
             },
             Stmt::Continue(loc) => {
@@ -891,35 +817,38 @@ function l $.slice.len(l %slc) {{
                 if !self.ctx.loop_valid() {
                     return Err(error!(loc, "No body to continue in!"));
                 }
-                genf!(self, "jmp @p{p}_test");
+                self.block_add_discard(Instruction::Jmp(label!["p{p}_test"]));
 
                 let s = self.ctx.stopper();
-                genf!(self, "@p{p}_stopper{s}");
+                self.start_block(&format!("p{p}_stopper{s}"));
                 Ok(())
             },
             Stmt::Return(loc, opt, setting_main, use_stopper) => {
                 if let Some(expr) = opt {
-                    let val = self.emit_expr(comptime, expr, None)?;
-                    if self.expected_return != val.typ {
-                        return Err(error!(loc, "Expected to return {}, but got {} instead", (self.expected_return), (val.typ)));
+                    let tv = self.emit_expr(comptime, expr, None)?;
+                    if self.expected_return != tv.typ {
+                        return Err(error!(loc, "Expected to return {}, but got {} instead", (self.expected_return), (tv.typ)));
                     }
-                    genf!(self, "ret %.s{}", (val.tag));
+                    self.block_add_discard(Instruction::Ret(Some(Value::Temp(tv))));
                 } else {
                     if self.expected_return != TypeKind::Void.into() {
                         let void: Type = TypeKind::Void.into();
                         return Err(error!(loc, "Expected to return {}, but got {} instead", (self.expected_return), (void)));
                     }
-                    // stupid dumb dirty annoying hack ty qbe
+                    // TODO: check HACK: stupid dumb dirty annoying hack ty qbe
                     if setting_main {
-                        genf!(self, "ret 0");
+                        self.block_add_discard(Instruction::Ret(Some(Value::Constant("0".into()))));
                     } else {
-                        genf!(self, "ret");
+                        self.block_add_discard(Instruction::Ret(None));
                     }
                 }
-                if use_stopper {
-                    let s = self.ctx.stopper();
-                    genf!(self, "@return_stopper{s}");
-                }
+                // TODO: use_stopper is deprecated
+                // Make all blocks store a "dead" variable
+                // if returned, they are dead
+                // emit_stmts should check this to see if a block should be inserted
+                //     let s = self.ctx.stopper();
+                //     self.start_block(format!("return_stopper{s}"))
+                self.current_block().dead = true;
                 Ok(())
             },
             Stmt::Defer(loc, box_stmt) => {
@@ -930,10 +859,11 @@ function l $.slice.len(l %slc) {{
                     Err(error!(loc, "Cannot defer here (did you try to nest them?)"))
                 }
             },
+            _ => todo!("stmt {stmt:?}"),
         }
     }
 
-    pub fn emit_expr(&mut self, comptime: &mut Compiletime, expr: Expr, expected_type: Option<Type>) -> Result<StackValue> {
+    pub fn emit_expr(&mut self, comptime: &mut Compiletime, expr: Expr, expected_type: Option<Type>) -> Result<TempValue> {
         match expr {
             Expr::Ident(token) => {
                 let Token::Ident(loc, text) = token else { unreachable!() };
@@ -943,41 +873,38 @@ function l $.slice.len(l %slc) {{
                     allocated = true;
                 }
 
-                let val = self.ctx.lookup(&text, loc)?;
+                let tv = self.ctx.lookup(&text, loc)?;
                 if allocated {
-                    let deref = val.typ.deref();
-                    // let qtype = deref.qbe_type();
-                    // // TODO: won't be compatible with large data
-                    // if val.typ.unsigned() {
-                    //     genf!(self, "%.s{tag} ={qtype} loadu{qtype} %.s{}", (val.tag));
-                    // } else {
-                    //     genf!(self, "%.s{tag} ={qtype} loads{qtype} %.s{}", (val.tag));
-                    // }
-                    let tag = self.load_type(&deref, val.tag, format!("%.s{val}"));
-                    Ok(StackValue{tag, typ: val.typ})
+                    let deref = tv.typ.deref(); // TODO: does this make sense? why would the type be a ptr
+                    let tag = self.ctx.alloc();
+                    let tv_retrieved = self.block_add_assign(
+                        temp![tag, tv.typ.clone()],
+                        Instruction::Load(Value::Temp(tv), deref)
+                    );
+                    Ok(tv_retrieved)
                 } else {
-                    Ok(val)
+                    Ok(tv)
                 }
             },
             Expr::Path(token, box_expr) => {
                 todo!()
             },
             Expr::Bool(token) => {
-                let tag = self.ctx.alloc();
-
                 let b = match token {
                     Token::True(_) => "1",
                     Token::False(_) => "0",
                     _ => unreachable!()
                 };
 
-                genf!(self, "%.s{tag} =w copy {b}");
-                Ok(StackValue{ typ: TypeKind::Bool.into(), tag })
+                let tag = self.ctx.alloc();
+                let tv = self.block_add_assign(
+                    temp![tag, TypeKind::Bool.into()],
+                    Instruction::Copy(Value::Constant(format!("{b}")))
+                );
+                Ok(tv)
             },
             Expr::Number(token) => {
-                // TODO: assuming its an i32 for now
                 let Token::Int(_, i) = token else { unreachable!() };
-                let tag = self.ctx.alloc();
 
                 let typ = if let Some(typ) = expected_type {
                     if typ.assert_number(ldef!()).is_ok() {
@@ -988,25 +915,35 @@ function l $.slice.len(l %slc) {{
                 } else {
                     TypeKind::S32.into()
                 };
-                let qtyp = typ.qbe_type();
-                genf!(self, "%.s{tag} ={qtyp} copy {i}");
-                Ok(StackValue{ typ, tag })
+
+                let tag = self.ctx.alloc();
+                let tv = self.block_add_assign(
+                    temp![tag, typ],
+                    Instruction::Copy(Value::Constant(format!("{i}")))
+                );
+                Ok(tv)
             },
             Expr::String(token) => {
                 let Token::String(_, text) = token else { unreachable!() };
                 let gtag = self.strings.len();
                 let tag = self.ctx.alloc(); // for local instance
-                genf!(self, "%.s{tag} =l copy $.str{gtag}");
+                let tv = self.block_add_assign(
+                    temp![tag, TypeKind::U64.into()],
+                    Instruction::Copy(Value::Global(format!(".str{gtag}")))
+                );
                 self.strings.push(text);
-                Ok(StackValue{ tag, typ: self.decorated_mod.parse_module.type_alias_map.get("str").unwrap().clone() })
+                Ok(temp![tv.tag, self.decorated_mod.parse_module.type_alias_map.get("str").unwrap().clone()])
             },
             Expr::CString(token) => {
                 let Token::CString(_, text) = token else { unreachable!() };
                 let gtag = self.cstrings.len();
                 let tag = self.ctx.alloc(); // for local instance
-                genf!(self, "%.s{tag} =l copy $.cstr{gtag}");
+                let tv = self.block_add_assign(
+                    temp![tag, TypeKind::U64.into()],
+                    Instruction::Copy(Value::Global(format!(".cstr{gtag}")))
+                );
                 self.cstrings.push(text);
-                Ok(StackValue{ tag, typ: self.decorated_mod.parse_module.type_alias_map.get("cstr").unwrap().clone() })
+                Ok(temp![tv.tag, self.decorated_mod.parse_module.type_alias_map.get("cstr").unwrap().clone()])
             },
             Expr::BinOp(_, op, box_lhs, box_rhs) => {
                 match op {
@@ -1015,29 +952,26 @@ function l $.slice.len(l %slc) {{
                         let rloc = box_rhs.loc();
                         
                         let lval = self.emit_expr(comptime, *box_lhs, expected_type)?;
-                        lval.typ.assert_number(lloc)?;
                         let rval = self.emit_expr(comptime, *box_rhs, Some(lval.typ.clone()))?;
+                        lval.typ.assert_number(lloc)?;
                         rval.typ.assert_number(rloc)?;
-
+                        
                         let tag = self.ctx.alloc();
-
-                        let qtyp = lval.typ.qbe_type();
-
-                        let instr = match op {
-                            Op::Add => "add",
-                            Op::Sub => "sub",
-                            Op::Mul => "mul",
+                        let typ = lval.typ.clone();
+                        let _ = match op {
+                            Op::Add => self.block_add_assign(temp![tag, lval.typ.clone()], Instruction::Add(Value::Temp(lval), Value::Temp(rval))),
+                            Op::Sub => self.block_add_assign(temp![tag, lval.typ.clone()], Instruction::Sub(Value::Temp(lval), Value::Temp(rval))),
+                            Op::Mul => self.block_add_assign(temp![tag, lval.typ.clone()], Instruction::Mul(Value::Temp(lval), Value::Temp(rval))),
                             Op::Div => {
                                 if lval.typ.unsigned() {
-                                    "udiv"
+                                    self.block_add_assign(temp![tag, lval.typ.clone()], Instruction::DivU(Value::Temp(lval), Value::Temp(rval)))
                                 } else {
-                                    "div"
+                                    self.block_add_assign(temp![tag, lval.typ.clone()], Instruction::Div(Value::Temp(lval), Value::Temp(rval)))
                                 }
                             },
                             _ => unreachable!(),
                         };
-                        genf!(self, "%.s{tag} ={qtyp} {instr} %.s{}, %.s{}", (lval.tag), (rval.tag));
-                        Ok(StackValue{ typ: lval.typ, tag })
+                        Ok(temp![tag, typ])
                     },
                     Op::Eq => {
                         match *box_lhs {
@@ -1047,12 +981,9 @@ function l $.slice.len(l %slc) {{
 
                                 let new = self.emit_expr(comptime, *box_rhs, Some(val.typ.clone()))?;
                                 if val.typ != new.typ {
-                                    // TODO: print types properly
                                     return Err(error!(loc, "Assignment expected {}, got {} instead", (val.typ), (new.typ)))
                                 }
-                                // Redundant but necessary
-                                let qtyp = new.typ.qbe_type();
-                                genf!(self, "%.s{} ={qtyp} copy %.s{}", (val.tag), (new.tag));
+                                let _ = self.block_add_assign(temp![val.tag, new.typ.clone()], Instruction::Copy(Value::Temp(new.clone())));
                                 Ok(new)
                             },
                             Expr::UnOp(t, Op::Mul, box_expr, postfix) => {
@@ -1071,7 +1002,7 @@ function l $.slice.len(l %slc) {{
                                 // TODO: won't be compatible with large data
 
                                 // genf!(self, "store{qtype} %.s{}, %.s{}", (new.tag), (ptr.tag));
-                                self.store_type(&deref, new.tag, format!("%.s{ptr}"));
+                                self.block_add_discard(Instruction::Store(Value::Temp(ptr), Value::Temp(new.clone()), new.typ.clone()));
                                 Ok(new)
                             },
                             Expr::BinOp(_, Op::Arr, box_lhs2, box_rhs2) => {
@@ -1085,15 +1016,25 @@ function l $.slice.len(l %slc) {{
                                 rval.typ.assert_number(rloc)?;
                                 let base = self.get_indexable_ptr(&lval);
 
-                                let rtag = self.extend_to_long(rval.tag, &rval.typ);                       
-                                let bytes = self.ctx.alloc();
-                                let ptr = self.ctx.alloc();
                                 let Some(ref inner) = lval.typ.inner else { unreachable!() };
-                                genf!(self, "%.s{bytes} =l mul %.s{rtag}, {}", (inner.sizeof()));
-                                genf!(self, "%.s{ptr} =l add %.s{base}, %.s{bytes}");
+                                let rtag = self.ctx.alloc();
+                                let rtv = self.block_add_assign(
+                                    temp![rtag, TypeKind::U64.into()],
+                                    Instruction::Cast(Value::Temp(rval.clone()), TypeKind::U64.into(), rval.typ.clone())
+                                );
+                                let bytes = self.ctx.alloc();
+                                let bytes_tv = self.block_add_assign(
+                                    temp![bytes, TypeKind::U64.into()],
+                                    Instruction::Mul(Value::Temp(rtv), Value::Constant(format!("{}", inner.sizeof())))
+                                );
+                                let ptr = self.ctx.alloc();
+                                let ptr_tv = self.block_add_assign(
+                                    temp![ptr, TypeKind::U64.into()],
+                                    Instruction::Add(Value::Temp(temp![base, TypeKind::U64.into()]), Value::Temp(bytes_tv))
+                                );
 
                                 let val = self.emit_expr(comptime, *box_rhs, Some(*inner.clone()))?;
-                                self.store_type(&val.typ, val.tag, format!("%.s{ptr}"));
+                                self.block_add_discard(Instruction::Store(Value::Temp(ptr_tv), Value::Temp(val.clone()), val.typ.clone()));
                                 Ok(val)
                             },
                             e => return Err(error!(e.loc(), "Expected variable or deref assignment")),
@@ -1111,19 +1052,19 @@ function l $.slice.len(l %slc) {{
                         let cond = self.ctx.alloc();
                         let tag = self.ctx.alloc();
                         let l = self.ctx.label_logic();
-                        genf!(self, "jnz %.s{}, @l{l}_rhs, @l{l}_false", (lval.tag));
-                        genf!(self, "@l{l}_rhs");
-                        genf!(self, "jnz %.s{}, @l{l}_true, @l{l}_false", (rval.tag));
+                        self.block_add_discard(Instruction::Jnz(Value::Temp(lval), label!["l{l}_rhs"], label!["l{l}_false"]));
+                        self.start_block(&format!("l{l}_rhs"));
+                        self.block_add_discard(Instruction::Jnz(Value::Temp(rval), label!["l{l}_true"], label!["l{l}_false"]));
 
-                        genf!(self, "@l{l}_true");
-                        genf!(self, "%.s{tag} =w copy 1"); // Set false if we jump here
-                        genf!(self, "jmp @l{l}_end");
+                        self.start_block(&format!("l{l}_true"));
+                        let _ = self.block_add_assign(temp![tag, TypeKind::Bool.into()], Instruction::Copy(Value::Constant("1".into())));
+                        self.block_add_discard(Instruction::Jmp(label!["l{l}_end"]));
 
-                        genf!(self, "@l{l}_false");
-                        genf!(self, "%.s{tag} =w copy 0"); // Set false if we jump here
+                        self.start_block(&format!("l{l}_false"));
+                        let _ = self.block_add_assign(temp![tag, TypeKind::Bool.into()], Instruction::Copy(Value::Constant("0".into())));
 
-                        genf!(self, "@l{l}_end");
-                        Ok(StackValue{ tag, typ: TypeKind::Bool.into() })
+                        self.start_block(&format!("l{l}_end"));
+                        Ok(temp![tag, TypeKind::Bool.into()])
                     },
                     Op::OrOr => {
                         let lloc = box_lhs.loc();
@@ -1137,51 +1078,36 @@ function l $.slice.len(l %slc) {{
                         let cond = self.ctx.alloc();
                         let tag = self.ctx.alloc();
                         let l = self.ctx.label_logic();
-                        genf!(self, "jnz %.s{}, @l{l}_true, @l{l}_rhs", (lval.tag));
-                        genf!(self, "@l{l}_rhs");
-                        genf!(self, "jnz %.s{}, @l{l}_true, @l{l}_false", (rval.tag));
+                        self.block_add_discard(Instruction::Jnz(Value::Temp(lval), label!["l{l}_true"], label!["l{l}_rhs"]));
+                        self.start_block(&format!("l{l}_rhs"));
+                        self.block_add_discard(Instruction::Jnz(Value::Temp(rval), label!["l{l}_true"], label!["l{l}_false"]));
 
-                        genf!(self, "@l{l}_true");
-                        genf!(self, "%.s{tag} =w copy 1"); // Set false if we jump here
-                        genf!(self, "jmp @l{l}_end");
+                        self.start_block(&format!("l{l}_true"));
+                        let _ = self.block_add_assign(temp![tag, TypeKind::Bool.into()], Instruction::Copy(Value::Constant("1".into())));
+                        self.block_add_discard(Instruction::Jmp(label!["l{l}_end"]));
 
-                        genf!(self, "@l{l}_false");
-                        genf!(self, "%.s{tag} =w copy 0"); // Set false if we jump here
+                        self.start_block(&format!("l{l}_false"));
+                        let _ = self.block_add_assign(temp![tag, TypeKind::Bool.into()], Instruction::Copy(Value::Constant("0".into())));
 
-                        genf!(self, "@l{l}_end");
-                        Ok(StackValue{ tag, typ: TypeKind::Bool.into() })
+                        self.start_block(&format!("l{l}_end"));
+                        Ok(temp![tag, TypeKind::Bool.into()])
                     },
                     Op::Gt | Op::Lt | Op::Ge | Op::Le | Op::EqEq | Op::NotEq => {
                         let lloc = box_lhs.loc();
                         let rloc = box_rhs.loc();
-                        
+
+                        // TODO: type checking bug
                         let lval = self.emit_expr(comptime, *box_lhs, expected_type)?;
                         lval.typ.assert_comparable(lloc)?;
                         let rval = self.emit_expr(comptime, *box_rhs, Some(lval.typ.clone()))?;
                         rval.typ.assert_comparable(rloc)?;
 
                         let tag = self.ctx.alloc();
-
-                        let qtyp = lval.typ.qbe_type();
-                        let instr = match op {
-                            Op::Gt => "gt",
-                            Op::Lt => "lt",
-                            Op::Ge => "ge",
-                            Op::Le => "le",
-                            Op::EqEq => "eq",
-                            Op::NotEq => "ne",
-                            _ => todo!(),
-                        };
-                        if op.qbe_depends_sign() {
-                            if lval.typ.unsigned() {
-                                genf!(self, "%.s{tag} =w cu{instr}{qtyp} %.s{}, %.s{}", (lval.tag), (rval.tag));
-                            } else {
-                                genf!(self, "%.s{tag} =w cs{instr}{qtyp} %.s{}, %.s{}", (lval.tag), (rval.tag));
-                            }
-                        } else {
-                            genf!(self, "%.s{tag} =w c{instr}{qtyp} %.s{}, %.s{}", (lval.tag), (rval.tag));
-                        }
-                        Ok(StackValue{ tag, typ: TypeKind::Bool.into() })
+                        let tv = self.block_add_assign(
+                            temp![tag, TypeKind::Bool.into()],
+                            Instruction::Cmp(op, lval.typ.clone(), Value::Temp(lval), Value::Temp(rval))
+                        );
+                        Ok(tv)
                     },
                     Op::Arr => {
                         // Slice
@@ -1192,30 +1118,46 @@ function l $.slice.len(l %slc) {{
                             
                             let lval = self.emit_expr(comptime, *box_lhs, None)?;
                             lval.typ.assert_indexable(lloc.clone())?;
-                            let base = self.get_indexable_ptr(&lval);
+                            let base = temp![self.get_indexable_ptr(&lval), TypeKind::U64.into()];
                             let base_count = match lval.typ.struct_kind {
                                 StructKind::Array => {
                                     let bc = self.ctx.alloc();
-                                    genf!(self, "%.s{bc} =l copy {}", (lval.typ.elements));
-                                    bc
+                                    let tv = self.block_add_assign(
+                                        temp![bc, TypeKind::U64.into()],
+                                        Instruction::Copy(Value::Constant(format!("{}", lval.typ.elements)))
+                                    );
+                                    tv
                                 }
                                 StructKind::Slice => {
                                     let bc_ptr = self.ctx.alloc();
-                                    genf!(self, "%.s{bc_ptr} =l add %.s{lval}, 8");
-                                    self.load_type(&TypeKind::U64.into(), bc_ptr, format!("%.s{bc_ptr}"))
+                                    let tv_ptr = self.block_add_assign(
+                                        temp![bc_ptr, TypeKind::U64.into()],
+                                        Instruction::Add(Value::Temp(lval.clone()), Value::Constant("8".into()))
+                                    );
+                                    let bc = self.ctx.alloc();
+                                    let tv = self.block_add_assign(
+                                        temp![bc, TypeKind::U64.into()],
+                                        Instruction::Load(Value::Temp(tv_ptr), TypeKind::U64.into())
+                                    );
+                                    tv
                                 },
                                 _ => return Err(error!(lloc, "Cannot index type {}", (lval.typ))),
                             };
 
                             // Make the slice
-                            let tag = self.ctx.alloc();
-                            let sz_offset = self.ctx.alloc();
-                            let sz_ptr = self.ctx.alloc();
-                            genf!(self, "%.s{tag} =l alloc8 16");
-                            genf!(self, "%.s{sz_offset} =l copy 8"); // offset(slice.size)
-                            genf!(self, "%.s{sz_ptr} =l add %.s{tag}, %.s{sz_offset}"); // &slice.size
-
                             let Some(ref inner) = lval.typ.inner else { unreachable!() };
+                            let slice_type = Type::wrap(*inner.clone(), StructKind::Slice, None, false);
+
+                            let tag = self.ctx.alloc();
+                            let tag_tv = self.block_add_assign(
+                                temp![tag, TypeKind::U64.into()],
+                                Instruction::Alloc(slice_type.clone())
+                            );
+                            let sz_ptr = self.ctx.alloc();
+                            let sz_ptr_tv = self.block_add_assign(
+                                temp![sz_ptr, TypeKind::U64.into()],
+                                Instruction::Add(Value::Temp(tag_tv.clone()), Value::Constant("8".into()))
+                            );
 
                             // Calculate the pointer and the length based on the range provided
                             let (final_ptr, final_count) = match (lower.clone(), upper.clone()) {
@@ -1227,42 +1169,76 @@ function l $.slice.len(l %slc) {{
                                     lower.typ.assert_number(lower_loc)?;
                                     upper.typ.assert_number(upper_loc)?;
 
-                                    let ltag = self.extend_to_long(lower.tag, &lower.typ);
-                                    let utag = self.extend_to_long(upper.tag, &upper.typ);
+                                    let ltag = self.ctx.alloc();
+                                    let ltv = self.block_add_assign(
+                                        temp![ltag, TypeKind::U64.into()],
+                                        Instruction::Cast(Value::Temp(lower.clone()), TypeKind::U64.into(), lower.typ.clone())
+                                    );
+                                    let utag = self.ctx.alloc();
+                                    let utv = self.block_add_assign(
+                                        temp![utag, TypeKind::U64.into()],
+                                        Instruction::Cast(Value::Temp(upper.clone()), TypeKind::U64.into(), upper.typ.clone())
+                                    );
 
                                     let bytes = self.ctx.alloc();
+                                    let bytes_tv = self.block_add_assign(
+                                        temp![bytes, TypeKind::U64.into()],
+                                        Instruction::Mul(Value::Temp(ltv.clone()), Value::Constant(format!("{}", inner.sizeof())))
+                                    );
                                     let ptr = self.ctx.alloc();
-                                    genf!(self, "%.s{bytes} =l mul %.s{ltag}, {}", (inner.sizeof()));
-                                    genf!(self, "%.s{ptr} =l add %.s{base}, %.s{bytes}");
+                                    let ptr_tv = self.block_add_assign(
+                                        temp![ptr, TypeKind::U64.into()],
+                                        Instruction::Add(Value::Temp(base), Value::Temp(bytes_tv))
+                                    );
 
                                     let count = self.ctx.alloc();
-                                    genf!(self, "%.s{count} =l sub %.s{utag}, %.s{ltag}");
-                                    (ptr, count)
+                                    let count_tv = self.block_add_assign(
+                                        temp![count, TypeKind::U64.into()],
+                                        Instruction::Sub(Value::Temp(utv), Value::Temp(ltv))
+                                    );
+                                    (ptr_tv, count_tv)
                                 },
                                 (Some(bl), None) => {
                                     let lower_loc = bl.loc();
                                     let lower = self.emit_expr(comptime, *bl, None)?;
                                     lower.typ.assert_number(lower_loc)?;
 
-                                    let ltag = self.extend_to_long(lower.tag, &lower.typ);
+                                    let ltag = self.ctx.alloc();
+                                    let ltv = self.block_add_assign(
+                                        temp![ltag, TypeKind::U64.into()],
+                                        Instruction::Cast(Value::Temp(lower.clone()), TypeKind::U64.into(), lower.typ.clone())
+                                    );
 
                                     let bytes = self.ctx.alloc();
+                                    let bytes_tv = self.block_add_assign(
+                                        temp![bytes, TypeKind::U64.into()],
+                                        Instruction::Mul(Value::Temp(ltv.clone()), Value::Constant(format!("{}", inner.sizeof())))
+                                    );
                                     let ptr = self.ctx.alloc();
-                                    genf!(self, "%.s{bytes} =l mul %.s{ltag}, {}", (inner.sizeof()));
-                                    genf!(self, "%.s{ptr} =l add %.s{base}, %.s{bytes}");
+                                    let ptr_tv = self.block_add_assign(
+                                        temp![ptr, TypeKind::U64.into()],
+                                        Instruction::Add(Value::Temp(base), Value::Temp(bytes_tv))
+                                    );
 
                                     let count = self.ctx.alloc();
-                                    genf!(self, "%.s{count} =l sub %.s{base_count}, %.s{ltag}");
-                                    (ptr, count)
+                                    let count_tv = self.block_add_assign(
+                                        temp![count, TypeKind::U64.into()],
+                                        Instruction::Sub(Value::Temp(base_count), Value::Temp(ltv))
+                                    );
+                                    (ptr_tv, count_tv)
                                 },
                                 (None, Some(bu)) => {
                                     let upper_loc = bu.loc();
                                     let upper = self.emit_expr(comptime, *bu, None)?;
                                     upper.typ.assert_number(upper_loc)?;
 
-                                    let utag = self.extend_to_long(upper.tag, &upper.typ);
+                                    let utag = self.ctx.alloc();
+                                    let utv = self.block_add_assign(
+                                        temp![utag, TypeKind::U64.into()],
+                                        Instruction::Cast(Value::Temp(upper.clone()), TypeKind::U64.into(), upper.typ.clone())
+                                    );
 
-                                    (base, utag)
+                                    (base, utv)
                                 },
                                 (None, None) => {
                                     (base, base_count)
@@ -1270,9 +1246,9 @@ function l $.slice.len(l %slc) {{
                             };
 
                             // Store the range (no offsetting the ptr or anything here)
-                            genf!(self, "storel %.s{final_ptr}, %.s{tag}"); // Assumes array
-                            genf!(self, "storel %.s{final_count}, %.s{sz_ptr}"); // Assumes array
-                            return Ok(StackValue{tag, typ: Type::wrap(*inner.clone(), StructKind::Slice, None, false)});
+                            self.block_add_discard(Instruction::Store(Value::Temp(tag_tv), Value::Temp(final_ptr), TypeKind::U64.into()));
+                            self.block_add_discard(Instruction::Store(Value::Temp(sz_ptr_tv), Value::Temp(final_count), TypeKind::U64.into()));
+                            return Ok(TempValue{tag, typ: Type::wrap(*inner.clone(), StructKind::Slice, None, false)});
                         }
 
                         // Array
@@ -1283,27 +1259,53 @@ function l $.slice.len(l %slc) {{
                         let rval = self.emit_expr(comptime, *box_rhs, None)?;
                         lval.typ.assert_indexable(lloc)?;
                         rval.typ.assert_number(rloc)?;
-                        let base = self.get_indexable_ptr(&lval);
-                        
+                        let base = temp![self.get_indexable_ptr(&lval), TypeKind::U64.into()];
+ 
                         // We need the index to be a 64 bit value
                         // TODO: maybe factor this out too?
-                        let rtag = self.extend_to_long(rval.tag, &rval.typ);
+                        let rtag = self.ctx.alloc();
+                        let rtv = self.block_add_assign(
+                            temp![rtag, TypeKind::U64.into()],
+                            Instruction::Cast(Value::Temp(rval.clone()), TypeKind::U64.into(), rval.typ.clone())
+                        );
 
                         let bytes = self.ctx.alloc();
                         let ptr = self.ctx.alloc();
 
                         if lval.typ.is_ptr() {
                             let deref = lval.typ.deref();
-                            genf!(self, "%.s{bytes} =l mul %.s{rtag}, {}", (deref.sizeof()));
-                            genf!(self, "%.s{ptr} =l add %.s{base}, %.s{bytes}");
-                            let tag = self.load_type(&deref, ptr, format!("%.s{ptr}"));
-                            Ok(StackValue{tag, typ: deref})
+                            let bytes_tv = self.block_add_assign(
+                                temp![bytes, TypeKind::U64.into()],
+                                Instruction::Mul(Value::Temp(rtv), Value::Constant(format!("{}", deref.sizeof())))
+                            );
+                            let ptr_tv = self.block_add_assign(
+                                temp![ptr, TypeKind::U64.into()],
+                                Instruction::Add(Value::Temp(base), Value::Temp(bytes_tv))
+                            );
+
+                            let tag = self.ctx.alloc();
+                            let tag_tv = self.block_add_assign(
+                                temp![tag, deref.clone()],
+                                Instruction::Load(Value::Temp(ptr_tv), deref)
+                            );
+                            Ok(tag_tv)
                         } else {
                             let Some(ref inner) = lval.typ.inner else { unreachable!() };
-                            genf!(self, "%.s{bytes} =l mul %.s{rtag}, {}", (inner.sizeof()));
-                            genf!(self, "%.s{ptr} =l add %.s{base}, %.s{bytes}");
-                            let tag = self.load_type(inner, ptr, format!("%.s{ptr}"));
-                            Ok(StackValue{tag, typ: *inner.clone()})
+                            let bytes_tv = self.block_add_assign(
+                                temp![bytes, TypeKind::U64.into()],
+                                Instruction::Mul(Value::Temp(rtv), Value::Constant(format!("{}", inner.sizeof())))
+                            );
+                            let ptr_tv = self.block_add_assign(
+                                temp![ptr, TypeKind::U64.into()],
+                                Instruction::Add(Value::Temp(base), Value::Temp(bytes_tv))
+                            );
+
+                            let tag = self.ctx.alloc();
+                            let tag_tv = self.block_add_assign(
+                                temp![tag, *inner.clone()],
+                                Instruction::Load(Value::Temp(ptr_tv), *inner.clone())
+                            );
+                            Ok(tag_tv)
                         }
                     },
                     Op::Dot => {
@@ -1324,8 +1326,14 @@ function l $.slice.len(l %slc) {{
                                         StructKind::Slice => {
                                             // Built in
                                             let tag = self.ctx.alloc();
-                                            genf!(self, "%.s{tag} =l call $.slice.{}(l %.s{})", text, lval);
-                                            Ok(StackValue{tag, typ: decl.ret_type.clone().unwrap_or(TypeKind::Void.into())})
+                                            let tv = self.block_add_assign(
+                                                temp![tag, decl.ret_type.clone().unwrap_or(TypeKind::Void.into())],
+                                                // Note: for methods we pass the object by a pointer
+                                                Instruction::Call(Value::Global(format!(".slice.{text}")), vec![temp![lval.tag, lval.typ.ptr()]])
+                                            );
+                                            Ok(tv)
+                                            //genf!(self, "%.s{tag} =l call $.slice.{}(l %.s{})", text, lval);
+                                            //Ok(StackValue{tag, typ: decl.ret_type.clone().unwrap_or(TypeKind::Void.into())})
                                         },
                                         _ => todo!()
                                     }
@@ -1339,7 +1347,7 @@ function l $.slice.len(l %slc) {{
                             Err(error!(lloc, "No methods exist for type {}", (lval.typ)))
                         }
                     },
-                    _ => todo!()
+                    op => todo!("all remaining binary operators: {op:?}"),
                 }
             },
             Expr::UnOp(_, ch, box_expr, postfix) => {
@@ -1348,12 +1356,14 @@ function l $.slice.len(l %slc) {{
                         match *box_expr {
                             Expr::Number(token) => {
                                 let Token::Int(_, i) = token else { unreachable!() };
-                                let tag = self.ctx.alloc();
 
+                                let tag = self.ctx.alloc();
                                 let typ = expected_type.unwrap_or(TypeKind::S32.into());
-                                let qtyp = typ.qbe_type();
-                                genf!(self, "%.s{tag} ={qtyp} copy -{i}");
-                                Ok(StackValue{ typ, tag })
+                                let tv = self.block_add_assign(
+                                    temp![tag, typ],
+                                    Instruction::Copy(Value::Constant(format!("-{i}")))
+                                );
+                                Ok(tv)
                             },
                             Expr::Ident(token) => todo!(),
                             _ => unreachable!("Unsupported expr"),
@@ -1365,7 +1375,7 @@ function l $.slice.len(l %slc) {{
                                 // We should already allocate the variable as a pointer
                                 let Token::Ident(loc, text) = token else { unreachable!() };
                                 let val = self.ctx.lookup(&text, loc)?;
-                                Ok(StackValue{tag: val.tag, typ: val.typ.ptr()})
+                                Ok(temp![val.tag, val.typ.ptr()])
                             },
                             _ => unreachable!("Unsupported expr"),
                         }
@@ -1379,15 +1389,8 @@ function l $.slice.len(l %slc) {{
                         }
                         
                         let deref = ptr.typ.deref();
-                        // let qtype = deref.qbe_type();
-                        // // TODO: won't be compatible with large data
-                        // if deref.unsigned() {
-                        //     genf!(self, "%.s{tag} ={qtype} loadu{qtype} %.s{}", (ptr.tag));
-                        // } else {
-                        //     genf!(self, "%.s{tag} ={qtype} loads{qtype} %.s{}", (ptr.tag));
-                        // }
-                        let tag = self.load_type(&deref, ptr.tag, format!("%.s{ptr}"));
-                        Ok(StackValue{tag: tag, typ: deref})
+                        let tv = load!(self, deref.clone(), ptr);
+                        Ok(tv)
                     },
                     Op::Implicit => {
                         let loc = box_expr.loc();
@@ -1396,8 +1399,12 @@ function l $.slice.len(l %slc) {{
                             if !typ.assert_number(loc.clone()).is_ok() && !val.typ.assert_number(loc.clone()).is_ok() {
                                 return Err(error!(loc, "Only implicit conversions between integers are supported!"));
                             }
-                            let tag = self.convert_primitive_int(&val, &typ);
-                            Ok(StackValue{tag, typ})
+                            let tag = self.ctx.alloc();
+                            let tv = self.block_add_assign(
+                                temp![tag, typ.clone()],
+                                Instruction::Cast(Value::Temp(val.clone()), typ, val.typ.clone())
+                            );
+                            Ok(tv)
                         } else {
                             return Err(error!(loc, "Need a type to infer for implicit conversion!"))
                         }
@@ -1412,16 +1419,13 @@ function l $.slice.len(l %slc) {{
                 unreachable!("can't declare functions within functions")
             },
             Expr::Call(box_expr, mut args) => {
-                // todo!("Parse for expressions in function calls. Then, using $def in the gen_funcall_from_funcdef macro, check the validity of arguments passed and call with the correct arguments");
                 match *box_expr {
                     Expr::Ident(token) => {
-                        //todo!("work on module resolution and maybe return types");
                         let Token::Ident(loc, text) = token else { unreachable!() };
                         let local_func = self.decorated_mod.parse_module.function_map.get(&text);
                         gen_funcall_from_funcdef!(self, comptime, (self.generated_mod.name),local_func, &text, args, loc)
                     },
                     Expr::Path(token, box_expr) => {
-                        // todo!("module resolution: make sure function maps get moved into Compiletime for module resolution lookup. This should be the library for which the 'import' statement can be moved into the Generator function map (I might need to make another structure which contains a global map and also a map of imported modules (key is the full path))")
                         let loc = token.loc();
                         let path = path_to_string(Expr::Path(token, box_expr));
                         let modname = get_module_name(path.clone());
@@ -1446,9 +1450,11 @@ function l $.slice.len(l %slc) {{
             Expr::Null(token) => {
                 if let Some(typ) = expected_type {
                     let tag = self.ctx.alloc();
-                    
-                    genf!(self, "%.s{tag} =l copy 0");
-                    Ok(StackValue{tag, typ})
+                    let tv = self.block_add_assign(
+                        temp![tag, typ],
+                        Instruction::Copy(Value::Constant("0".into()))
+                    );
+                    Ok(tv)
                 } else {
                     Err(error!(token.loc(), "Cannot infer type of null pointer"))
                 }
@@ -1469,20 +1475,17 @@ function l $.slice.len(l %slc) {{
                             }
 
                             // Make the array
-                            let tag = self.ctx.alloc();
                             let Some(ref inner) = typ.inner else { unreachable!() };
                             let sz = typ.elements * inner.sizeof();
                             if sz == 0 {
                                 return Err(error!(token.loc(), "Cannot make an array of size '0'!"));
                             }
 
-                            // TODO: alignment
-                            genf!(self, "%.s{tag} =l alloc4 {sz}");
-                            // genf!(self, "%.s{tag}.idx.0 =l copy %.s{tag}");
-                            // for i in 1..typ.elements {
-                            //     let bytes = i * inner.sizeof();
-                            //     genf!(self, "%.s{tag}.idx.{i} =l add %.s{tag}, {bytes}");
-                            // }
+                            let tag = self.ctx.alloc();
+                            let tv = self.block_add_assign(
+                                temp![tag, typ.clone()],
+                                Instruction::Alloc(typ.clone())
+                            );
                             
                             // Get the expressions
                             let mut vals = Vec::new();
@@ -1496,12 +1499,10 @@ function l $.slice.len(l %slc) {{
                                 if val.typ != **inner {
                                     return Err(error!(token.loc(), "Expected {} for array member, got {} instead", (*inner), (val.typ)));
                                 }
-                                let qtype = val.typ.qbe_type();
-                                // genf!(self, "store{qtype} %.s{val}, %.s{tag}.idx.{i}");
-                                let ptr = self.tag_offset(tag, inner, i);
-                                self.store_type(&val.typ, val.tag, format!("%.s{ptr}"));
+                                let ptr = array_offset!(self, tv, inner, i);
+                                self.block_add_discard(Instruction::Store(Value::Temp(ptr), Value::Temp(val.clone()), val.typ.clone()))
                             }
-                            Ok(StackValue{tag, typ})
+                            Ok(tv)
                         },
                         StructKind::Slice => {
                             if exprs.len() != 2 {
@@ -1524,15 +1525,27 @@ function l $.slice.len(l %slc) {{
                             if len.typ.assert_number(len_loc).is_err() {
                                 return Err(error!(ptr_loc, "Expected number for second field of slice"));
                             }
-                            let long = self.extend_to_long(len.tag, &len.typ);
+                            let ltag = self.ctx.alloc();
+                            let long = self.block_add_assign(
+                                temp![ltag, TypeKind::U64.into()],
+                                Instruction::Cast(Value::Temp(len.clone()), TypeKind::U64.into(), len.typ.clone())
+                            );
 
                             let tag = self.ctx.alloc();
                             let offset = self.ctx.alloc();
-                            genf!(self, "%.s{tag} =l alloc8 16");
-                            genf!(self, "storel %.s{ptr}, %.s{tag}");
-                            genf!(self, "%.s{offset} =l add %.s{tag}, 8");
-                            genf!(self, "storel %.s{long}, %.s{offset}");
-                            Ok(StackValue{tag, typ: Type::wrap(*inner.clone(), StructKind::Slice, None, false)})
+                            let slice_type = Type::wrap(*inner.clone(), StructKind::Slice, None, false);
+
+                            let tagtv = self.block_add_assign(
+                                temp![tag, Into::<Type>::into(TypeKind::Void).ptr()],
+                                Instruction::Alloc(slice_type.clone())
+                            );
+                            self.block_add_discard(Instruction::Store(Value::Temp(tagtv.clone()), Value::Temp(ptr.clone()), ptr.typ.clone()));
+                            let offsettv = self.block_add_assign(
+                                temp![offset, Into::<Type>::into(TypeKind::Void).ptr()],
+                                Instruction::Add(Value::Temp(tagtv.clone()), Value::Constant("8".into()))
+                            );
+                            self.block_add_discard(Instruction::Store(Value::Temp(offsettv.clone()), Value::Temp(long.clone()), long.typ.clone()));
+                            Ok(temp![tagtv.tag, slice_type])
                         },
                         _ => return Err(error!(token.loc(), "Cannot initialize {typ} with initializer list")),
                     }
@@ -1547,126 +1560,44 @@ function l $.slice.len(l %slc) {{
                 let loc = box_expr.loc();
                 let val = self.emit_expr(comptime, *box_expr, Some(to_typ.clone()))?;
                 if val.typ.assert_number(loc.clone()).is_ok() && to_typ.assert_number(loc).is_ok() {
-                    let tag = self.convert_primitive_int(&val, &to_typ);
-                    Ok(StackValue{tag, typ: to_typ})
+                    let tag = self.ctx.alloc();
+                    let tv = self.block_add_assign(
+                        temp![tag, to_typ.clone()],
+                        Instruction::Cast(Value::Temp(val.clone()), to_typ, val.typ.clone())
+                    );
+                    Ok(tv)
                 } else {
                     todo!("unsupported conversion");
                 }
             },
         }
     }
+}
 
-    // Must pass a number
-    fn convert_primitive_int(&mut self, val: &StackValue, to_typ: &Type) -> usize {
-        match val.typ.kind {
-            TypeKind::U64 | TypeKind::S64 => {
-                let tag = self.ctx.alloc();
-                let qtype = to_typ.qbe_type();
-                genf!(self, "%.s{tag} ={qtype} copy %.s{val}");
-                tag
-            },
-            TypeKind::U32 | TypeKind::S32 => {
-                let tag = self.ctx.alloc();
-                let qtype = to_typ.qbe_type();
-                if to_typ.sizeof() > val.typ.sizeof() {
-                    self.extend_to_long(val.tag, &val.typ)
-                } else {
-                    genf!(self, "%.s{tag} ={qtype} copy %.s{val}");
-                    tag
-                }
-            },
-            TypeKind::U16 => {
-                if to_typ.sizeof() > val.typ.sizeof() {
-                    match to_typ.sizeof() {
-                        8 => {
-                            self.extend_to_long(val.tag, &val.typ)
-                        },
-                        4 => {
-                            let tag = self.ctx.alloc();
-                            let qtype = to_typ.qbe_type();
-                            genf!(self, "%.s{tag} ={qtype} extuh %.s{val}");
-                            tag
-                        },
-                        _ => unreachable!(),
-                    }
-                } else {
-                    let tag = self.ctx.alloc();
-                    let qtype = to_typ.qbe_type();
-                    genf!(self, "%.s{tag} ={qtype} copy %.s{val}");
-                    tag
-                }
-            },
-            TypeKind::S16 => {
-                if to_typ.sizeof() > val.typ.sizeof() {
-                    match to_typ.sizeof() {
-                        8 => {
-                            self.extend_to_long(val.tag, &val.typ)
-                        },
-                        4 => {
-                            let tag = self.ctx.alloc();
-                            let qtype = to_typ.qbe_type();
-                            genf!(self, "%.s{tag} ={qtype} extsh %.s{val}");
-                            tag
-                        },
-                        _ => unreachable!(),
-                    }
-                } else {
-                    let tag = self.ctx.alloc();
-                    let qtype = to_typ.qbe_type();
-                    genf!(self, "%.s{tag} ={qtype} copy %.s{val}");
-                    tag
-                }
-            },
-            TypeKind::U8 => {
-                if to_typ.sizeof() > val.typ.sizeof() {
-                    match to_typ.sizeof() {
-                        8 => {
-                            self.extend_to_long(val.tag, &val.typ)
-                        },
-                        4 | 2 => {
-                            let tag = self.ctx.alloc();
-                            let qtype = to_typ.qbe_type();
-                            genf!(self, "%.s{tag} ={qtype} extub %.s{val}");
-                            tag
-                        },
-                        _ => unreachable!(),
-                    }
-                } else {
-                    let tag = self.ctx.alloc();
-                    let qtype = to_typ.qbe_type();
-                    genf!(self, "%.s{tag} ={qtype} copy %.s{val}");
-                    tag
-                }
-            },
-            TypeKind::S8 => {
-                if to_typ.sizeof() > val.typ.sizeof() {
-                    match to_typ.sizeof() {
-                        8 => {
-                            self.extend_to_long(val.tag, &val.typ)
-                        },
-                        4 | 2 => {
-                            let tag = self.ctx.alloc();
-                            let qtype = to_typ.qbe_type();
-                            genf!(self, "%.s{tag} ={qtype} extsb %.s{val}");
-                            tag
-                        },
-                        _ => unreachable!(),
-                    }
-                } else {
-                    let tag = self.ctx.alloc();
-                    let qtype = to_typ.qbe_type();
-                    genf!(self, "%.s{tag} ={qtype} copy %.s{val}");
-                    tag
-                }
-            },
-            _ => unreachable!(),
+////////////////////// COMPILETIME //////////////////////
+
+pub struct Compiletime {
+    module_map: HashMap<String, Module>,
+    method_map: HashMap<Type, HashMap<String, FunctionDecl>>,
+    main_defined: bool,
+}
+
+impl Compiletime {
+    pub fn add_module(&mut self, name: String, module: Module) {
+        if self.module_map.get(&name).is_some() {
+            self.module_map.get_mut(&name).unwrap().extend(module.into_iter());
+        } else {
+            self.module_map.insert(name, module);
         }
+    }
+    
+    pub fn get_module(&self, path: Expr) -> Option<&Module> {
+        let s = path_to_string(path);
+        self.module_map.get(&s)
     }
 }
 
-
 impl Compiletime {
-    // TODO: accept buildoptions in the future
     pub fn new() -> Self {
         Self {
             module_map: HashMap::new(),
@@ -1788,11 +1719,7 @@ impl Compiletime {
         } else {
             println!("Created object files!");
         }
-
+        
         Ok(())
-    }
-
-    pub fn cmd(&mut self, cmd: Vec<String>) -> Result<()> {
-        todo!()
     }
 }
