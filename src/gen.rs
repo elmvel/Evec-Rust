@@ -1644,8 +1644,18 @@ impl Compiletime {
 
             // .s -> .o
             let assembler_path = options.assembler_path.clone().unwrap_or("cc".to_string());
-            if options.verbose_shell { println!("[CMD] {assembler_path} -c {bf}{name}.s -o {bf}{name}.o") }
-            if !Command::new(&assembler_path)
+            let debug_info = if options.debug_info {
+                "-g"
+            } else {
+                ""
+            };
+            if options.verbose_shell { println!("[CMD] {assembler_path} {debug_info} -c {bf}{name}.s -o {bf}{name}.o") }
+            // Rust is strange...
+            let mut asm_cmd = &mut Command::new(&assembler_path);
+            if debug_info.len() > 0 {
+                asm_cmd = asm_cmd.arg(debug_info);
+            }
+            if !asm_cmd
                 .arg("-c")
                 .arg(&format!("{bf}{name}.s"))
                 .arg("-o")
