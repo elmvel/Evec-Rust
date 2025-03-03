@@ -23,6 +23,8 @@ mod gen;
 mod constants;
 mod target;
 mod ir;
+mod backend_qbe;
+mod backend_c;
 
 // https://matklad.github.io/2020/04/13/simple-but-powerful-pratt-parsing.html
 
@@ -152,9 +154,9 @@ fn main() -> ExitCode {
 
     fetch_stdlib(&mut input_paths);
 
-    if options.target.backend() != Backend::Qbe {
-        todo!("Handling other backends are not supported yet! I need to add infrastructure in ir.rs");
-    }
+    // if options.target.backend() != Backend::Qbe {
+    //     todo!("Handling other backends are not supported yet! I need to add infrastructure in ir.rs");
+    // }
     if options.verbose {
         println!(
             "Targetting {}-{}, using the {} backend.",

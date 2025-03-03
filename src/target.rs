@@ -1,5 +1,9 @@
 use std::fmt;
 
+pub const SUFFIX_QBE: &str = ".ssa";
+pub const SUFFIX_LLVM: &str = ".ll";
+pub const SUFFIX_C: &str = ".c";
+
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum Os {
     Linux,

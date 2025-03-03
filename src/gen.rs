@@ -12,6 +12,7 @@ use crate::decorator::DecoratedModule;
 use crate::errors::SyntaxError;
 use crate::ir::*;
 use crate::constants::MODULE_SEPARATOR;
+use crate::{Backend, SUFFIX_QBE, SUFFIX_LLVM, SUFFIX_C};
 
 type Module = HashMap<String, FunctionDecl>;
 type SymbolTable = HashMap<String, TempValue>;
@@ -288,9 +289,19 @@ impl Generator {
     }
 
     // Dump after all AST converted to IR
-    fn dump(&mut self) {
-        for toplevel in &self.toplevels {
-            genf!(self, "{toplevel}");
+    fn dump(&mut self, backend: Backend) {
+        match backend {
+            Backend::Qbe => {
+                for toplevel in &self.toplevels {
+                    genf!(self, "{toplevel}");
+                }
+            },
+            Backend::Llvm => {
+                todo!("LLVM ir dumping")
+            },
+            Backend::C => {
+                todo!("C ir dumping")
+            },
         }
     }
 
@@ -483,7 +494,7 @@ function l $.slice.len(l %slc) {{
         }
     }
     
-    pub fn emit(&mut self, comptime: &mut Compiletime) -> Result<()> {
+    pub fn emit(&mut self, comptime: &mut Compiletime, options: &BuildOptions) -> Result<()> {
         genf!(self, "# QBE Start");
         genf!(self, "data $fmt_d = {{ b \"%d\\n\", b 0 }}");
         genf!(self, "data $fmt_ll = {{ b \"%lld\\n\", b 0 }}");
@@ -509,7 +520,7 @@ function l $.slice.len(l %slc) {{
         self.emit_c_strings();
         genf!(self, "");
         
-        self.dump(); // Emit IR into the backend 
+        self.dump(options.target.backend()); // Emit IR into the backend 
         Ok(())
     }
 
@@ -1606,6 +1617,28 @@ impl Compiletime {
         }
     }
 
+    fn compile(&mut self, bf: &str, name: &str, suf: &str, options: &BuildOptions) -> Result<()> {
+        let qbe_path = options.qbe_path.clone().unwrap_or("qbe".to_string());
+        let backend_path = match options.target.backend() {
+            Backend::Qbe => qbe_path,
+            Backend::Llvm => "llvm-as".to_string(),
+            Backend::C => "cc".to_string(),
+        };
+        // TODO: prob not enough
+        if options.verbose_shell { println!("[CMD] {backend_path} {bf}{name}{suf} -o {bf}{name}.s") }
+        if !Command::new(&backend_path)
+            .arg(&format!("{bf}{name}{suf}"))
+            .arg("-o")
+            .arg(&format!("{bf}{name}.s"))
+            .status()
+            .expect("ERROR: qbe not found")
+            .success()
+        {
+            return Err(error_orphan!("Failure with getting assembly from QBE"));
+        }
+        Ok(())
+    }
+
     pub fn emit(&mut self, mut decorated_mods: Vec<DecoratedModule>, options: &BuildOptions) -> Result<()> {
         let mut objs = Vec::new();
         for decorated_mod in &decorated_mods {
@@ -1618,29 +1651,24 @@ impl Compiletime {
             let name = format!("{modname}.{name}");
 
             let mut generator = Generator::new(decorated_mod);
-            generator.emit(self)?;
+            generator.emit(self, options)?;
 
             let bf = "./.build/"; // build folder
             if !std::path::Path::new(&bf).exists() {
                 std::fs::create_dir(bf).unwrap();
             }
 
-            let mut file = File::create(&format!("{bf}{name}.ssa")).or(Err(error_orphan!("Could not create qbe output file")))?;
+            let suf = match options.target.backend() {
+                Backend::Qbe => SUFFIX_QBE,
+                Backend::Llvm => SUFFIX_LLVM,
+                Backend::C => SUFFIX_C,
+            };
+
+            let mut file = File::create(&format!("{bf}{name}{suf}")).or(Err(error_orphan!("Could not create qbe output file")))?;
             let _ = write!(file, "{}", generator.generated_mod.output);
 
-            // .ssa -> .s
-            let qbe_path = options.qbe_path.clone().unwrap_or("qbe".to_string());
-            if options.verbose_shell { println!("[CMD] {qbe_path} {bf}{name}.ssa -o {bf}{name}.s") }
-            if !Command::new(&qbe_path)
-                .arg(&format!("{bf}{name}.ssa"))
-                .arg("-o")
-                .arg(&format!("{bf}{name}.s"))
-                .status()
-                .expect("ERROR: qbe not found")
-                .success()
-            {
-                return Err(error_orphan!("Failure with getting assembly from QBE"));
-            }
+            // .? -> .s
+            self.compile(bf, &name, suf, options);
 
             // .s -> .o
             let assembler_path = options.assembler_path.clone().unwrap_or("cc".to_string());
