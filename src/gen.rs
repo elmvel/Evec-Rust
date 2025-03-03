@@ -1482,7 +1482,16 @@ function l $.slice.len(l %slc) {{
                                 typ.infer_elements = false;
                             }
                             if typ.elements != exprs.len() {
-                                return Err(error!(token.loc(), "Type expected {} arguments for initializer list", (typ.elements)));
+                                // TODO: default constructors
+                                let Some(ref inner) = typ.inner else { unreachable!() };
+                                if exprs.len() == 0 && inner.assert_number(ldef!()).is_ok() {
+                                    for i in 0..typ.elements {
+                                        exprs.push(Expr::Number(Token::Int(ldef!(), 0)))
+                                    }
+                                    assert!(typ.elements == exprs.len());
+                                } else {
+                                    return Err(error!(token.loc(), "Type expected {} arguments for initializer list", (typ.elements)));
+                                }
                             }
 
                             // Make the array
