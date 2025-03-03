@@ -136,14 +136,11 @@ impl fmt::Display for Instruction {
                         _ => todo!(),
                     }
                 } else {
-                    if typ.sizeof() == 8 {
+                    if typ.sizeof() == 8 || typ.sizeof() == 4 {
                         write!(f, "load{qtype} {v_ptr}")
                     } else {
-                        if typ.unsigned() {
-                            write!(f, "loadu{qtype} {v_ptr}")
-                        } else {
-                            write!(f, "loads{qtype} {v_ptr}")
-                        }
+                        let ext = typ.qbe_ext_type();
+                        write!(f, "load{ext} {v_ptr}")
                     }
                 }
             },
