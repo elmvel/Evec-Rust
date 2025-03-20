@@ -12,10 +12,12 @@ use crate::decorator::DecoratedModule;
 use crate::errors::SyntaxError;
 use crate::ir::*;
 use crate::constants::MODULE_SEPARATOR;
+use crate::const_eval::{ConstExpr, LazyExpr};
 use crate::{Backend, SUFFIX_QBE, SUFFIX_LLVM, SUFFIX_C};
 
 type Module = HashMap<String, FunctionDecl>;
 type SymbolTable = HashMap<String, TempValue>;
+type ConstTable = HashMap<String, Expr>;
 
 ////////////////////// GENERATOR MACROS //////////////////////
 
@@ -33,7 +35,7 @@ macro_rules! gen {
 
 macro_rules! temp [
     ($tag:expr, $typ:expr) => {
-        TempValue{tag: $tag, typ: $typ}
+        TempValue{tag: $tag, typ: $typ, constant: false}
     }
 ];
 
@@ -61,7 +63,7 @@ macro_rules! array_offset (
         {
             let btag = $gen.ctx.alloc();
             let ptr = $gen.ctx.alloc();
-            let bytes = $i * $typ.sizeof();
+            let bytes = $i as usize * $typ.sizeof();
 
             let btv = $gen.block_add_assign(temp![btag, TypeKind::U64.into()], Instruction::Copy(Value::Constant(format!("{bytes}"))));
             let ptv = $gen.block_add_assign(temp![ptr, $typ.ptr()], Instruction::Add(Value::Temp($tv.clone()), Value::Temp(btv)));
@@ -75,6 +77,7 @@ macro_rules! array_offset (
 #[derive(Default)]
 struct StackFrame {
     var_table: SymbolTable,
+    const_table: ConstTable,
 }
 
 impl StackFrame {
@@ -84,6 +87,14 @@ impl StackFrame {
 
     pub fn symtab_lookup(&mut self, name: &str, loc: Location) -> Result<TempValue> {
         self.var_table.get(name).cloned().ok_or(error!(loc, "No variable exists of name '{name}'"))
+    }
+
+    pub fn constab_store(&mut self, name: String, expr: Expr) {
+        self.const_table.insert(name, expr);
+    }
+
+    pub fn constab_lookup(&mut self, name: &str, loc: Location) -> Result<Expr> {
+        self.const_table.get(name).cloned().ok_or(error!(loc, "No constant exists of name '{name}'"))
     }
 }
 
@@ -154,6 +165,16 @@ impl FunctionContext {
         }
         Err(error!(loc, "No variable exits of name '{name}'"))
     }
+
+    pub fn lookup_constant(&mut self, name: &str, loc: Location) -> Result<Expr> {
+        for frame in self.frames.iter_mut().rev() {
+            let result = frame.constab_lookup(name, loc.clone());
+            if result.is_ok() {
+                return result;
+            }
+        }
+        Err(error!(loc, "No constant exits of name '{name}'"))
+    }
 }
 
 #[derive(Debug, Default, Clone, PartialEq, Eq, Hash)]
@@ -176,10 +197,10 @@ struct GeneratedModule {
     output: String,
 }
 
-struct Generator {
+pub struct Generator {
     pub decorated_mod: DecoratedModule,
     pub generated_mod: GeneratedModule,
-    ctx: FunctionContext,
+    pub ctx: FunctionContext,
     expected_type: Option<Type>,
     imports: HashSet<String>,
     expected_return: Type,
@@ -287,7 +308,7 @@ impl Generator {
         gen.generated_mod.name = name;
         gen
     }
-
+        
     // Dump after all AST converted to IR
     fn dump(&mut self, backend: Backend) {
         match backend {
@@ -421,14 +442,14 @@ function l $.slice.len(l %slc) {{
         let ptr_typ: Type = Into::<Type>::into(TypeKind::Void).ptr();
         map.insert("ptr".into(), FunctionDecl::new(vec![], Some(ptr_typ), "ptr".into(), None));
         map.insert("len".into(), FunctionDecl::new(vec![], Some(TypeKind::U64.into()), "len".into(), None));
-        comptime.method_map.insert(Type::wrap(TypeKind::Void.into(), StructKind::Slice, None, false), map);
+        comptime.method_map.insert(Type::wrap(TypeKind::Void.into(), StructKind::Slice, LazyExpr::default(), false), map);
         Ok(())
     }
 
     fn type_to_builtin_check(typ: &Type) -> Type {
         if typ.is_struct() {
             match typ.struct_kind {
-                StructKind::Slice => Type::wrap(TypeKind::Void.into(), StructKind::Slice, None, false),
+                StructKind::Slice => Type::wrap(TypeKind::Void.into(), StructKind::Slice, LazyExpr::default(), false),
                 _ => typ.clone()
             }
         } else {
@@ -685,7 +706,9 @@ function l $.slice.len(l %slc) {{
                             let Some(ref inner) = val.typ.inner else { unreachable!() };
 
                             self.block_add_raw(format!("%.void =w call $printf(l $fmt_arr_start, ...)"));
-                            for i in 0..val.typ.elements {
+                            let constexpr = val.typ.elements.const_resolve();
+                            let ConstExpr::Number(n) = constexpr else { unreachable!("user land error") };
+                            for i in 0..n {
                                 let ptr = array_offset!(self, val, inner, i);
                                 let tag = self.ctx.alloc();
                                 let tv = self.block_add_assign(
@@ -731,7 +754,7 @@ function l $.slice.len(l %slc) {{
                 self.dbg_print_val(comptime, tv);
                 Ok(())
             },
-            Stmt::Let(name, typ, expr) => {
+            Stmt::Let(name, typ, expr, is_constant) => {
                 let Token::Ident(loc, text) = name else { unreachable!() };
 
                 // Do we need to allocate this on the stack?
@@ -740,7 +763,7 @@ function l $.slice.len(l %slc) {{
                     allocate = true;
                 }
                 
-                let raw = self.emit_expr(comptime, expr, typ.clone())?;
+                let raw = self.emit_expr(comptime, expr.clone(), typ.clone())?;
 
                 let mut tv = if allocate {
                     let tag = self.ctx.alloc();
@@ -755,6 +778,7 @@ function l $.slice.len(l %slc) {{
                 };
 
                 if let Some(mut expected_type) = typ {
+                    expected_type = crate::const_eval::type_resolve(self, expected_type)?;
                     // TODO: refactor type checking
                     if !tv.typ.soft_equals_array(&mut expected_type) {
                         return Err(error!(loc, "Expected type {expected_type}, but got {} instead", (tv.typ)));
@@ -764,6 +788,10 @@ function l $.slice.len(l %slc) {{
                 let frame = self.current_frame()?;
                 if frame.symtab_lookup(&text, loc.clone()).is_ok() {
                     return Err(error!(loc, "Redefinition of variable {text} is not allowed!"));
+                }
+                if is_constant {
+                    tv.constant = true;
+                    frame.constab_store(text.clone(), expr);
                 }
                 frame.symtab_store(text, tv);
                 Ok(())
@@ -994,6 +1022,9 @@ function l $.slice.len(l %slc) {{
                                 if val.typ != new.typ {
                                     return Err(error!(loc, "Assignment expected {}, got {} instead", (val.typ), (new.typ)))
                                 }
+                                if val.constant {
+                                    return Err(error!(loc, "Cannot assign to a constant!"))
+                                }
                                 let _ = self.block_add_assign(temp![val.tag, new.typ.clone()], Instruction::Copy(Value::Temp(new.clone())));
                                 Ok(new)
                             },
@@ -1132,10 +1163,13 @@ function l $.slice.len(l %slc) {{
                             let base = temp![self.get_indexable_ptr(&lval), TypeKind::U64.into()];
                             let base_count = match lval.typ.struct_kind {
                                 StructKind::Array => {
+                                    let constexpr = lval.typ.elements.const_resolve();
+                                    let ConstExpr::Number(n) = constexpr else { unreachable!("user land error") };
+                                    
                                     let bc = self.ctx.alloc();
                                     let tv = self.block_add_assign(
                                         temp![bc, TypeKind::U64.into()],
-                                        Instruction::Copy(Value::Constant(format!("{}", lval.typ.elements)))
+                                        Instruction::Copy(Value::Constant(format!("{}", n)))
                                     );
                                     tv
                                 }
@@ -1157,7 +1191,7 @@ function l $.slice.len(l %slc) {{
 
                             // Make the slice
                             let Some(ref inner) = lval.typ.inner else { unreachable!() };
-                            let slice_type = Type::wrap(*inner.clone(), StructKind::Slice, None, false);
+                            let slice_type = Type::wrap(*inner.clone(), StructKind::Slice, LazyExpr::default(), false);
 
                             let tag = self.ctx.alloc();
                             let tag_tv = self.block_add_assign(
@@ -1259,7 +1293,7 @@ function l $.slice.len(l %slc) {{
                             // Store the range (no offsetting the ptr or anything here)
                             self.block_add_discard(Instruction::Store(Value::Temp(tag_tv), Value::Temp(final_ptr), TypeKind::U64.into()));
                             self.block_add_discard(Instruction::Store(Value::Temp(sz_ptr_tv), Value::Temp(final_count), TypeKind::U64.into()));
-                            return Ok(TempValue{tag, typ: Type::wrap(*inner.clone(), StructKind::Slice, None, false)});
+                            return Ok(temp![tag, Type::wrap(*inner.clone(), StructKind::Slice, LazyExpr::default(), false)])
                         }
 
                         // Array
@@ -1478,16 +1512,33 @@ function l $.slice.len(l %slc) {{
                     match typ.struct_kind {
                         StructKind::Array => {
                             if typ.infer_elements {
-                                typ.elements = exprs.len();
+                                typ.elements = LazyExpr::make_constant(ConstExpr::Number(exprs.len() as i64));
                                 typ.infer_elements = false;
                             }
-                            if typ.elements != exprs.len() {
-                                return Err(error!(token.loc(), "Type expected {} arguments for initializer list", (typ.elements)));
+                            typ.elements.const_eval(self)?;
+                            let constexpr = typ.elements.const_resolve();
+                            let ConstExpr::Number(n) = constexpr else { unreachable!("user land error") };
+                            if n as usize != exprs.len() {
+                                // TODO: default constructors
+                                let Some(ref inner) = typ.inner else { unreachable!() };
+                                if exprs.len() == 0 && inner.assert_number(ldef!()).is_ok() {
+                                    for i in 0..n as usize {
+                                        exprs.push(Expr::Number(Token::Int(ldef!(), 0)))
+                                    }
+                                    assert!(n as usize == exprs.len());
+                                } else {
+                                    return Err(error!(token.loc(), "Type expected {} arguments for initializer list", (n as usize)));
+                                }
+                                //return Err(error!(token.loc(), "Type expected {} arguments for initializer list but got {} instead", n, (exprs.len())));
                             }
+
+                            // Update the expected type with our final length
+                            // TODO I may be stupid I think this is unnecessary
+                            typ.elements = LazyExpr::make_constant(ConstExpr::Number(n));
 
                             // Make the array
                             let Some(ref inner) = typ.inner else { unreachable!() };
-                            let sz = typ.elements * inner.sizeof();
+                            let sz = n as usize * inner.sizeof();
                             if sz == 0 {
                                 return Err(error!(token.loc(), "Cannot make an array of size '0'!"));
                             }
@@ -1544,7 +1595,7 @@ function l $.slice.len(l %slc) {{
 
                             let tag = self.ctx.alloc();
                             let offset = self.ctx.alloc();
-                            let slice_type = Type::wrap(*inner.clone(), StructKind::Slice, None, false);
+                            let slice_type = Type::wrap(*inner.clone(), StructKind::Slice, LazyExpr::default(), false);
 
                             let tagtv = self.block_add_assign(
                                 temp![tag, Into::<Type>::into(TypeKind::Void).ptr()],
