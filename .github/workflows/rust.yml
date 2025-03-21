@@ -12,9 +12,9 @@ jobs:
 
     steps:
     - uses: actions/checkout@v4
-      with:
-        repository: 8l/qbe
-        path: ./qbe
+
+    - name: Fetch QBE
+      run: git clone git://c9x.me/qbe.git
         
     - name: Build QBE
       working-directory: ./qbe
@@ -27,7 +27,7 @@ jobs:
         
     - name: Build
       working-directory: ./Evec-Rust
-      run: pwd && ls && make debug
+      run: make debug
       
     - name: Run tests
       working-directory: ./Evec-Rust/tests/
