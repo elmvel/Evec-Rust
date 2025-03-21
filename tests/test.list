@@ -52,4 +52,5 @@
 ../target/debug/main ./implicit2.eve && ./b.out
 ../target/debug/main ./slice_init_list.eve && ./b.out
 ../target/debug/main ./rule110_stub.eve && ./b.out
+../target/debug/main ./array_default_init.eve && ./b.out
 ../target/debug/main ./constant_array.eve && ./b.out

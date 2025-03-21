@@ -1,0 +1,10 @@
+module hello;
+
+import std::io;
+
+main :: fn() {
+    let xs: [3]u32 = {};
+    dbg xs[0];
+    dbg xs[1];
+    dbg xs[2];
+}
