@@ -1,56 +1,56 @@
-../target/debug/main ./dbg.eve && ./b.out
-../target/debug/main ./inttypes.eve && ./b.out
-../target/debug/main ./algebra.eve && ./b.out
-../target/debug/main ./redefinition.eve && ./b.out
-../target/debug/main ./assignment.eve && ./b.out
-../target/debug/main ./bool.eve && ./b.out
-../target/debug/main ./boolexpr.eve && ./b.out
-../target/debug/main ./boolexpr_enforce.eve && ./b.out
-../target/debug/main ./comparison.eve && ./b.out
-../target/debug/main ./if.eve && ./b.out
-../target/debug/main ./stackframe1.eve && ./b.out
-../target/debug/main ./stackframe2.eve && ./b.out
-../target/debug/main ./while.eve && ./b.out
-../target/debug/main ./break_continue.eve && ./b.out
-../target/debug/main ./module.eve ./module_foo.eve && ./b.out
-../target/debug/main ./module2.eve ./module2_mod.eve ./module2_io_mod.eve && ./b.out
-../target/debug/main ./functions.eve && ./b.out
-../target/debug/main ./return_typecheck.eve && ./b.out
-../target/debug/main ./addrof.eve && ./b.out
-../target/debug/main ./type_printing.eve && ./b.out
-../target/debug/main ./deref_and_assign.eve && ./b.out
-../target/debug/main ./pointer_type_annotation.eve && ./b.out
-../target/debug/main ./nullptr.eve && ./b.out
-../target/debug/main ./ptr_functions.eve && ./b.out
-../target/debug/main ./array1.eve && ./b.out
-../target/debug/main ./array2.eve && ./b.out
-../target/debug/main ./array3.eve && ./b.out
-../target/debug/main ./array4.eve && ./b.out
-../target/debug/main ./array5.eve && ./b.out
-../target/debug/main ./array6.eve && ./b.out
-../target/debug/main ./array7.eve && ./b.out
-../target/debug/main ./return_check.eve && ./b.out
-../target/debug/main ./slices1.eve && ./b.out
-../target/debug/main ./slices2.eve && ./b.out
-../target/debug/main ./defer.eve && ./b.out
-../target/debug/main ./slice_call_convention.eve && ./b.out
-../target/debug/main ./slices3.eve && ./b.out
-../target/debug/main ./slices4_abi.eve && ./b.out
-../target/debug/main ./defer_defer.eve && ./b.out
-../target/debug/main ./type_alias1.eve && ./b.out
-../target/debug/main ./type_alias2_redef.eve && ./b.out
-../target/debug/main ./strings.eve && ./b.out
-../target/debug/main ./usize.eve && ./b.out
-../target/debug/main ./slice_methods.eve && ./b.out
-../target/debug/main ./struct_pointer.eve && ./b.out
-../target/debug/main ./hello_world.eve && ./b.out
-../target/debug/main ./string_escaping.eve && ./b.out
-../target/debug/main ./malloc_free_and_voidptr.eve && ./b.out
-../target/debug/main ./nullptr_equality.eve && ./b.out
-../target/debug/main ./cast.eve && ./b.out
-../target/debug/main ./implicit.eve && ./b.out
-../target/debug/main ./implicit2.eve && ./b.out
-../target/debug/main ./slice_init_list.eve && ./b.out
-../target/debug/main ./rule110_stub.eve && ./b.out
-../target/debug/main ./array_default_init.eve && ./b.out
-../target/debug/main ./constant_array.eve && ./b.out
+../target/debug/main -Q $QBE_PATH ./dbg.eve && ./b.out
+../target/debug/main -Q $QBE_PATH ./inttypes.eve && ./b.out
+../target/debug/main -Q $QBE_PATH ./algebra.eve && ./b.out
+../target/debug/main -Q $QBE_PATH ./redefinition.eve && ./b.out
+../target/debug/main -Q $QBE_PATH ./assignment.eve && ./b.out
+../target/debug/main -Q $QBE_PATH ./bool.eve && ./b.out
+../target/debug/main -Q $QBE_PATH ./boolexpr.eve && ./b.out
+../target/debug/main -Q $QBE_PATH ./boolexpr_enforce.eve && ./b.out
+../target/debug/main -Q $QBE_PATH ./comparison.eve && ./b.out
+../target/debug/main -Q $QBE_PATH ./if.eve && ./b.out
+../target/debug/main -Q $QBE_PATH ./stackframe1.eve && ./b.out
+../target/debug/main -Q $QBE_PATH ./stackframe2.eve && ./b.out
+../target/debug/main -Q $QBE_PATH ./while.eve && ./b.out
+../target/debug/main -Q $QBE_PATH ./break_continue.eve && ./b.out
+../target/debug/main -Q $QBE_PATH ./module.eve ./module_foo.eve && ./b.out
+../target/debug/main -Q $QBE_PATH ./module2.eve ./module2_mod.eve ./module2_io_mod.eve && ./b.out
+../target/debug/main -Q $QBE_PATH ./functions.eve && ./b.out
+../target/debug/main -Q $QBE_PATH ./return_typecheck.eve && ./b.out
+../target/debug/main -Q $QBE_PATH ./addrof.eve && ./b.out
+../target/debug/main -Q $QBE_PATH ./type_printing.eve && ./b.out
+../target/debug/main -Q $QBE_PATH ./deref_and_assign.eve && ./b.out
+../target/debug/main -Q $QBE_PATH ./pointer_type_annotation.eve && ./b.out
+../target/debug/main -Q $QBE_PATH ./nullptr.eve && ./b.out
+../target/debug/main -Q $QBE_PATH ./ptr_functions.eve && ./b.out
+../target/debug/main -Q $QBE_PATH ./array1.eve && ./b.out
+../target/debug/main -Q $QBE_PATH ./array2.eve && ./b.out
+../target/debug/main -Q $QBE_PATH ./array3.eve && ./b.out
+../target/debug/main -Q $QBE_PATH ./array4.eve && ./b.out
+../target/debug/main -Q $QBE_PATH ./array5.eve && ./b.out
+../target/debug/main -Q $QBE_PATH ./array6.eve && ./b.out
+../target/debug/main -Q $QBE_PATH ./array7.eve && ./b.out
+../target/debug/main -Q $QBE_PATH ./return_check.eve && ./b.out
+../target/debug/main -Q $QBE_PATH ./slices1.eve && ./b.out
+../target/debug/main -Q $QBE_PATH ./slices2.eve && ./b.out
+../target/debug/main -Q $QBE_PATH ./defer.eve && ./b.out
+../target/debug/main -Q $QBE_PATH ./slice_call_convention.eve && ./b.out
+../target/debug/main -Q $QBE_PATH ./slices3.eve && ./b.out
+../target/debug/main -Q $QBE_PATH ./slices4_abi.eve && ./b.out
+../target/debug/main -Q $QBE_PATH ./defer_defer.eve && ./b.out
+../target/debug/main -Q $QBE_PATH ./type_alias1.eve && ./b.out
+../target/debug/main -Q $QBE_PATH ./type_alias2_redef.eve && ./b.out
+../target/debug/main -Q $QBE_PATH ./strings.eve && ./b.out
+../target/debug/main -Q $QBE_PATH ./usize.eve && ./b.out
+../target/debug/main -Q $QBE_PATH ./slice_methods.eve && ./b.out
+../target/debug/main -Q $QBE_PATH ./struct_pointer.eve && ./b.out
+../target/debug/main -Q $QBE_PATH ./hello_world.eve && ./b.out
+../target/debug/main -Q $QBE_PATH ./string_escaping.eve && ./b.out
+../target/debug/main -Q $QBE_PATH ./malloc_free_and_voidptr.eve && ./b.out
+../target/debug/main -Q $QBE_PATH ./nullptr_equality.eve && ./b.out
+../target/debug/main -Q $QBE_PATH ./cast.eve && ./b.out
+../target/debug/main -Q $QBE_PATH ./implicit.eve && ./b.out
+../target/debug/main -Q $QBE_PATH ./implicit2.eve && ./b.out
+../target/debug/main -Q $QBE_PATH ./slice_init_list.eve && ./b.out
+../target/debug/main -Q $QBE_PATH ./rule110_stub.eve && ./b.out
+../target/debug/main -Q $QBE_PATH ./array_default_init.eve && ./b.out
+../target/debug/main -Q $QBE_PATH ./constant_array.eve && ./b.out

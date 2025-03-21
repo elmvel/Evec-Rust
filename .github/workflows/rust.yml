@@ -12,8 +12,23 @@ jobs:
 
     steps:
     - uses: actions/checkout@v4
+
+    - name: Fetch QBE
+      run: git clone git://c9x.me/qbe.git
+        
+    - name: Build QBE
+      working-directory: ./qbe
+      run: make
+
+    - uses: actions/checkout@v4
+      with:
+        repository: elmvel/Evec-Rust
+        path: ./Evec-Rust
+        
     - name: Build
+      working-directory: ./Evec-Rust
       run: make debug
+      
     - name: Run tests
-      working-directory: ./tests/
-      run: ./rere.py replay test.list
+      working-directory: ./Evec-Rust/tests/
+      run: QBE_PATH=../../qbe/qbe ./rere.py replay test.list
