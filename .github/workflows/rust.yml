@@ -20,18 +20,15 @@ jobs:
       working-directory: ./qbe
       run: make
 
-    - name: Alias QBE
-      working-directory: ./qbe
-      run: alias qbe=$(pwd)/obj/qbe
-
     - uses: actions/checkout@v4
       with:
         repository: elmvel/Evec-Rust
         path: ./Evec-Rust
+        
     - name: Build
       working-directory: ./Evec-Rust
       run: pwd && ls && make debug
       
     - name: Run tests
       working-directory: ./Evec-Rust/tests/
-      run: ./rere.py replay test.list
+      run: ls .. && echo "=" && ls . && alias qbe=../qbe/obj/qbe && ./rere.py replay test.list
