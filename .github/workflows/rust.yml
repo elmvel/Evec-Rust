@@ -31,4 +31,4 @@ jobs:
       
     - name: Run tests
       working-directory: ./Evec-Rust/tests/
-      run: ls .. && echo "=" && ls . && alias qbe=../qbe/obj/qbe && ./rere.py replay test.list
+      run: ls ../.. && alias qbe=../../qbe/obj/qbe && ./rere.py replay test.list
