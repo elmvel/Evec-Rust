@@ -3,6 +3,7 @@ use std::fmt;
 use crate::lexer::Location;
 use crate::ast::*;
 use crate::ir::*;
+use crate::const_eval::ConstExpr;
 
 impl fmt::Display for TempValue {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -117,7 +118,7 @@ impl fmt::Display for Instruction {
                 write!(f, "call {v}(")?;
                 write!(f, "{}", (temps
                                   .iter()
-                                  .map(|TempValue{tag, typ}| {
+                                  .map(|TempValue{tag, typ, ..}| {
                                       let qtype = typ.qbe_ext_type();
                                       format!("{qtype} %.{tag}")
                                   })
@@ -149,7 +150,9 @@ impl fmt::Display for Instruction {
                     match typ.struct_kind {
                         StructKind::Array => {
                             let Some(ref inner) = typ.inner else { unreachable!() };
-                            let bytes = typ.elements * inner.sizeof();
+                            let constexpr = typ.elements.const_resolve();
+                            let ConstExpr::Number(n) = constexpr else { unreachable!("user land error") };
+                            let bytes = n as usize * inner.sizeof();
                             write!(f, "blit {v}, {v_ptr}, {bytes}")
                         },
                         StructKind::Slice => {

@@ -15,6 +15,7 @@ pub trait BackendC {
 pub struct TempValue {
     pub typ: Type,
     pub tag: usize,
+    pub constant: bool,
 }
 
 #[derive(Debug)]

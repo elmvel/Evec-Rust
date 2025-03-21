@@ -3,6 +3,7 @@ use crate::ast::*;
 use crate::Parser;
 use crate::parser::Result;
 use crate::errors::SyntaxError;
+use crate::const_eval::{ConstExpr, LazyExpr};
 
 // This only bubbles out if we have a successful parse OR we have an error
 // Getting a None value signals the parser to ONLY soft fail, hence the macro
@@ -67,7 +68,7 @@ impl Parser {
             // Slice
             if self.lexer.eat(Token::Op(ldef!(), ']')) {
                 let inner = self.parse_type()?;
-                return Ok(Type::wrap(inner, StructKind::Slice, None, false));
+                return Ok(Type::wrap(inner, StructKind::Slice, LazyExpr::default(), false));
             }
             // Array
             let size = self.parse_expr()?;
@@ -76,15 +77,18 @@ impl Parser {
                     if token.is_sink_ident() {
                         self.expect(Token::Op(ldef!(), ']'))?;
                         let inner = self.parse_type()?;
-                        Ok(Type::wrap(inner, StructKind::Array, None, true))
+                        Ok(Type::wrap(inner, StructKind::Array, LazyExpr::default(), true))
                     } else {
-                        Err(error!(size.loc(), "Expected numerical constant here!"))
+                        self.expect(Token::Op(ldef!(), ']'))?;
+                        let inner = self.parse_type()?;
+                        Ok(Type::wrap(inner, StructKind::Array, LazyExpr::make_expr(size), false))
+                        // Err(error!(size.loc(), "Expected numerical constant here!"))
                     }
                 },
                 Expr::Number(Token::Int(_, n)) => {
                     self.expect(Token::Op(ldef!(), ']'))?;
                     let inner = self.parse_type()?;
-                    Ok(Type::wrap(inner, StructKind::Array, Some(n as usize), false))
+                    Ok(Type::wrap(inner, StructKind::Array, LazyExpr::make_constant(ConstExpr::Number(n)), false))
                 },
                 _ => Err(error!(size.loc(), "Expected numerical constant here!")),
             }
@@ -130,11 +134,18 @@ impl Parser {
             typ = Some(self.parse_type()?);
         }
         
-        self.expect(Token::Op(ldef!(), '='))?;
-        let expr = self.parse_expr()?;
-        self.expect(Token::Op(ldef!(), ';'))?;
+        if self.lexer.peek() == Token::WideOp(ldef!(), (':', ':')) {
+            let _ = self.lexer.next();
+            let expr = self.parse_expr()?;
+            self.expect(Token::Op(ldef!(), ';'))?;
+            Ok(Some(Stmt::Let(token, typ, expr, true)))
+        } else {
+            self.expect(Token::Op(ldef!(), '='))?;
+            let expr = self.parse_expr()?;
+            self.expect(Token::Op(ldef!(), ';'))?;
 
-        Ok(Some(Stmt::Let(token, typ, expr)))
+            Ok(Some(Stmt::Let(token, typ, expr, false)))
+        }
     }
 
     /*

@@ -15,6 +15,7 @@ use crate::target::*;
 mod error_macro;
 #[macro_use] mod lexer;
 mod ast;
+mod const_eval;
 mod precedence;
 mod parser;
 mod decorator;

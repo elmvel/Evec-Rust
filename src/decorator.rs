@@ -124,7 +124,7 @@ impl Decorator {
             Stmt::Dbg(ref mut expr) => {
                 Self::rta_expr(expr, alias_map);
             },
-            Stmt::Let(_, ref mut typ, _) => {
+            Stmt::Let(_, ref mut typ, _, _) => {
                 if let Some(ref mut rt) = typ {
                     if rt.kind == TypeKind::Unresolved {
                         if let Some(typ2) = alias_map.get(rt.alias.as_ref().unwrap()) {
@@ -204,7 +204,7 @@ impl Decorator {
     pub fn rtc_stmt(stmt: &Stmt) -> bool {
         match stmt {
             Stmt::Dbg(_) => { false },
-            Stmt::Let(_, _, _) => { false },
+            Stmt::Let(_, _, _, _) => { false },
             Stmt::Scope(stmts) => {
                 let mut returns = false;
                 for stmt in stmts {
@@ -302,7 +302,7 @@ impl Decorator {
             Stmt::Dbg(expr) => {
                 Self::gav_expr(expr, addrvars);
             },
-            Stmt::Let(_, _, expr) => {
+            Stmt::Let(_, _, expr, _) => {
                 Self::gav_expr(expr, addrvars);
             },
             Stmt::Scope(stmts) => {
