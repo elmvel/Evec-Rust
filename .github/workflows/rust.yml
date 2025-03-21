@@ -26,7 +26,7 @@ jobs:
     
     - name: Build
       working-directory: .
-      run: pwd && make debug
+      run: pwd && ls && make debug
       
     - name: Run tests
       working-directory: ./tests/
