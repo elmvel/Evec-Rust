@@ -3,8 +3,10 @@ use std::fmt;
 use crate::lexer::{Token, Location};
 use crate::parser::Result;
 use crate::errors::SyntaxError;
+use crate::gen::Generator;
+use crate::const_eval::*;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Op {
     Add,
     Sub,
@@ -85,10 +87,10 @@ pub enum Global {
     Decl(Token, Expr), // main :: <expr> \ main :: fn() { ... }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Stmt {
     Dbg(Expr),
-    Let(Token, Option<Type>, Expr),
+    Let(Token, Option<Type>, Expr, bool), // bool -> const?
     Scope(Vec<Stmt>),
     Ex(Expr), // C-style: a+b; foo();
     If(Expr, Box<Stmt>, Option<Box<Stmt>>),
@@ -102,7 +104,7 @@ pub enum Stmt {
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Param(pub Token, pub Type);
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Expr {
     Ident(Token), // foo
     Path(Token, Box<Expr>), // std::io => (String std) (::) (*Expr(io))
@@ -143,7 +145,7 @@ impl Expr {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Attribute {
     Extern(Expr),
 }
@@ -154,7 +156,7 @@ pub struct Type {
     pub indirection: u8, // How many pointers do we have
     pub struct_kind: StructKind,
     // pub inner_type: u64, // We don't need this to exist now, but it should point to the typekind of the inner field?
-    pub elements: usize, // Compile time only
+    pub elements: LazyExpr, // Compile time only
     pub infer_elements: bool,
     pub inner: Option<Box<Type>>,
     pub alias: Option<String>,
@@ -166,7 +168,7 @@ impl Into<Type> for TypeKind {
             kind: self,
             indirection: 0,
             struct_kind: StructKind::CountStructs,
-            elements: 0,
+            elements: LazyExpr::default(),
             infer_elements: false,
             inner: None,
             alias: None,
@@ -199,25 +201,32 @@ pub enum StructKind {
     CountStructs,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum LengthInformation {
+    Elements(usize),
+    Constant(Token),
+    Unknown,
+}
+
 impl Type {
     pub fn copy(other: &Type) -> Self {
         Self {
             kind: other.kind.clone(),
             indirection: other.indirection,
             struct_kind: other.struct_kind.clone(),
-            elements: other.elements,
+            elements: other.elements.clone(),
             infer_elements: other.infer_elements,
             inner: other.inner.clone(),
             alias: None,
         }
     }
 
-    pub fn wrap(typ: Type, struct_kind: StructKind, elements: Option<usize>, infer_elements: bool) -> Self {
+    pub fn wrap(typ: Type, struct_kind: StructKind, elements: LazyExpr, infer_elements: bool) -> Self {
         Self {
             kind: TypeKind::Structure,
             indirection: 0,
             struct_kind: struct_kind,
-            elements: elements.unwrap_or(0),
+            elements: elements,
             infer_elements,
             inner: Some(Box::new(typ)),
             alias: None,
@@ -247,7 +256,7 @@ impl Type {
             kind: self.kind.clone(),
             indirection: self.indirection + 1,
             struct_kind: self.struct_kind.clone(),
-            elements: self.elements,
+            elements: self.elements.clone(),
             infer_elements: self.infer_elements,
             inner: self.inner.clone(),
             alias: self.alias.clone(),
@@ -259,7 +268,7 @@ impl Type {
             kind: self.kind.clone(),
             indirection: self.indirection.checked_sub(1).unwrap_or(0),
             struct_kind: self.struct_kind.clone(),
-            elements: self.elements,
+            elements: self.elements.clone(),
             infer_elements: self.infer_elements,
             inner: self.inner.clone(),
             alias: self.alias.clone(),
@@ -345,7 +354,10 @@ impl Type {
                 match self.struct_kind {
                     StructKind::Array => {
                         let Some(ref inner) = self.inner else { unreachable!() };
-                        self.elements * inner.sizeof()
+                        let constexpr = self.elements.const_resolve();
+                        match constexpr {
+                            ConstExpr::Number(n) => n as usize * inner.sizeof()
+                        }
                     },
                     StructKind::Slice => {
                         16
@@ -411,11 +423,11 @@ impl Type {
 
     pub fn soft_equals_array(&mut self, rhs: &mut Type) -> bool {
         if self.infer_elements && !rhs.infer_elements {
-            self.elements = rhs.elements;
+            self.elements = rhs.elements.clone();
             self.infer_elements = false;
         }
         if !self.infer_elements && rhs.infer_elements {
-            rhs.elements = self.elements;
+            rhs.elements = self.elements.clone();
             rhs.infer_elements = false;
         }
         if self.is_ptr() && rhs.is_void_ptr() {
@@ -455,7 +467,8 @@ impl fmt::Display for Type {
                 match self.struct_kind {
                     StructKind::Array => {
                         let Some(ref inner) = self.inner else { unreachable!("idk how to error out here") };
-                        write!(f, "[{}]{}", self.elements, *inner)
+                        let constexpr = self.elements.const_resolve();
+                        write!(f, "[{}]{}", constexpr, *inner)
                     }, 
                     StructKind::Slice => {
                         let Some(ref inner) = self.inner else { unreachable!("idk how to error out here") };

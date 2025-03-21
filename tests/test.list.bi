@@ -713,6 +713,17 @@ Created executable b.out!
 
 :b stderr 0
 
+:b shell 52
+../target/debug/main ./constant_array.eve && ./b.out
+:i returncode 0
+:b stdout 32
+Created executable b.out!
+0
+0
+0
+
+:b stderr 0
+
 :b shell 56
 ../target/debug/main ./array_default_init.eve && ./b.out
 :i returncode 0

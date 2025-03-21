@@ -6,6 +6,7 @@ use crate::ast::*;
 use crate::precedence::*;
 use crate::errors::SyntaxError;
 use crate::gen::FunctionDecl;
+use crate::const_eval::LazyExpr;
 
 mod parse_expr;
 mod parse_stmt;
@@ -69,7 +70,7 @@ impl Parser {
     }
 
     fn default_type_aliases(&mut self) {
-        self.type_alias_map.insert("str".into(), Type::wrap(TypeKind::U8.into(), StructKind::Slice, None, false));
+        self.type_alias_map.insert("str".into(), Type::wrap(TypeKind::U8.into(), StructKind::Slice, LazyExpr::default(), false));
         let u: Type = TypeKind::U8.into();
         self.type_alias_map.insert("cstr".into(), u.ptr());
         let usz: Type = TypeKind::U64.into();
