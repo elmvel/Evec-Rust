@@ -25,6 +25,7 @@ jobs:
       run: alias qbe=./obj/qbe
     
     - name: Build
+      working-directory: .
       run: make debug
       
     - name: Run tests
