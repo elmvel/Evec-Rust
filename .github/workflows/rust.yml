@@ -12,8 +12,21 @@ jobs:
 
     steps:
     - uses: actions/checkout@v4
+      with:
+        repository: 8l/qbe
+        path: ./qbe
+        
+    - name: Build QBE
+      working-directory: ./qbe
+      run: make
+
+    - name: Alias QBE
+      working-directory: ./qbe
+      run: alias qbe=./obj/qbe
+    
     - name: Build
       run: make debug
+      
     - name: Run tests
       working-directory: ./tests/
       run: ./rere.py replay test.list
