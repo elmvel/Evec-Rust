@@ -1,19 +1,23 @@
-use crate::lexer::{Lexer, Token, Location};
 use crate::ast::*;
-use crate::Parser;
-use crate::parser::Result;
-use crate::errors::SyntaxError;
 use crate::const_eval::{ConstExpr, LazyExpr};
+use crate::errors::SyntaxError;
+use crate::lexer::{Lexer, Location, Token};
+use crate::parser::Result;
+use crate::Parser;
 
 // This only bubbles out if we have a successful parse OR we have an error
 // Getting a None value signals the parser to ONLY soft fail, hence the macro
 macro_rules! bubble_stmt {
     ($result:expr) => {
         match $result {
-            Ok(opt) => if let Some(stmt) = opt { return Ok(stmt) },
+            Ok(opt) => {
+                if let Some(stmt) = opt {
+                    return Ok(stmt);
+                }
+            }
             Err(e) => return Err(e),
         }
-    }
+    };
 }
 
 impl Parser {
@@ -42,8 +46,13 @@ impl Parser {
 
         let token = self.lexer.peek();
         match token {
-            Token::Eof => Err(error_orphan!("Could not parse stmt: Unexpected end-of-file")),
-            t => Err(error!(t.loc(), "Could not parse stmt: Unexpected token `{t:?}`"))
+            Token::Eof => Err(error_orphan!(
+                "Could not parse stmt: Unexpected end-of-file"
+            )),
+            t => Err(error!(
+                t.loc(),
+                "Could not parse stmt: Unexpected token `{t:?}`"
+            )),
         }
     }
 
@@ -61,14 +70,14 @@ impl Parser {
         Ok(Some(Stmt::Dbg(expr)))
     }
 
-    pub fn parse_type(&mut self) -> Result<Type> {
+    pub fn parse_type(&mut self) -> Result<AstType> {
         if self.lexer.eat(Token::Op(ldef!(), '*')) {
-            Ok(self.parse_type()?.ptr())
+            Ok(AstType::Ptr(Box::new(self.parse_type()?)))
         } else if self.lexer.eat(Token::Op(ldef!(), '[')) {
             // Slice
             if self.lexer.eat(Token::Op(ldef!(), ']')) {
                 let inner = self.parse_type()?;
-                return Ok(Type::wrap(inner, StructKind::Slice, LazyExpr::default(), false));
+                return Ok(AstType::Slice(Box::new(inner)));
             }
             // Array
             let size = self.parse_expr()?;
@@ -77,34 +86,41 @@ impl Parser {
                     if token.is_sink_ident() {
                         self.expect(Token::Op(ldef!(), ']'))?;
                         let inner = self.parse_type()?;
-                        Ok(Type::wrap(inner, StructKind::Array, LazyExpr::default(), true))
+                        Ok(AstType::Array(LazyExpr::default(), Box::new(inner), true))
                     } else {
                         self.expect(Token::Op(ldef!(), ']'))?;
                         let inner = self.parse_type()?;
-                        Ok(Type::wrap(inner, StructKind::Array, LazyExpr::make_expr(size), false))
-                        // Err(error!(size.loc(), "Expected numerical constant here!"))
+                        Ok(AstType::Array(
+                            LazyExpr::make_expr(size),
+                            Box::new(inner),
+                            false,
+                        ))
                     }
-                },
+                }
                 Expr::Number(Token::Int(_, n)) => {
                     self.expect(Token::Op(ldef!(), ']'))?;
                     let inner = self.parse_type()?;
-                    Ok(Type::wrap(inner, StructKind::Array, LazyExpr::make_constant(ConstExpr::Number(n)), false))
-                },
+                    Ok(AstType::Array(
+                        LazyExpr::make_constant(ConstExpr::Number(n)),
+                        Box::new(inner),
+                        false,
+                    ))
+                }
                 _ => Err(error!(size.loc(), "Expected numerical constant here!")),
             }
         } else {
             let typ = match self.lexer.next() {
-                Token::U64(_) => TypeKind::U64.into(),
-                Token::U32(_) => TypeKind::U32.into(),
-                Token::U16(_) => TypeKind::U16.into(),
-                Token::U8(_) => TypeKind::U8.into(),
-                Token::S64(_) => TypeKind::S64.into(),
-                Token::S32(_) => TypeKind::S32.into(),
-                Token::S16(_) => TypeKind::S16.into(),
-                Token::S8(_) => TypeKind::S8.into(),
-                Token::Bool(_) => TypeKind::Bool.into(),
-                Token::Void(_) => TypeKind::Void.into(),
-                Token::Ident(_, text) => Type::alias(text),
+                Token::U64(_) => AstType::Base(Type::U64),
+                Token::U32(_) => AstType::Base(Type::U32),
+                Token::U16(_) => AstType::Base(Type::U16),
+                Token::U8(_) => AstType::Base(Type::U8),
+                Token::S64(_) => AstType::Base(Type::S64),
+                Token::S32(_) => AstType::Base(Type::S32),
+                Token::S16(_) => AstType::Base(Type::S16),
+                Token::S8(_) => AstType::Base(Type::S8),
+                Token::Bool(_) => AstType::Base(Type::Bool),
+                Token::Void(_) => AstType::Base(Type::Void),
+                Token::Ident(_, text) => AstType::Alias(text),
                 Token::Eof => Err(error_orphan!("Expected type but got end-of-file"))?,
                 t => Err(error!(t.loc(), "Expected type!"))?,
             };
@@ -127,13 +143,15 @@ impl Parser {
             return Ok(None);
         }
 
-        let Expr::Ident(token) = self.parse_expr_ident()? else { unreachable!() };
+        let Expr::Ident(token) = self.parse_expr_ident()? else {
+            unreachable!()
+        };
 
         let mut typ = None;
         if self.lexer.eat(Token::Op(ldef!(), ':')) {
             typ = Some(self.parse_type()?);
         }
-        
+
         if self.lexer.peek() == Token::WideOp(ldef!(), (':', ':')) {
             let _ = self.lexer.next();
             let expr = self.parse_expr()?;
@@ -164,7 +182,9 @@ impl Parser {
 
             let else_block = if self.lexer.eat(Token::Else(ldef!())) {
                 Some(Box::new(self.parse_stmt()?))
-            } else { None };
+            } else {
+                None
+            };
 
             Ok(Some(Stmt::If(expr, Box::new(stmt), else_block)))
         } else {
@@ -172,9 +192,15 @@ impl Parser {
 
             let else_block = if self.lexer.eat(Token::Else(ldef!())) {
                 Some(Box::new(self.parse_stmt()?))
-            } else { None };
-            
-            Ok(Some(Stmt::If(expr, Box::new(Stmt::Scope(stmts)), else_block)))
+            } else {
+                None
+            };
+
+            Ok(Some(Stmt::If(
+                expr,
+                Box::new(Stmt::Scope(stmts)),
+                else_block,
+            )))
         }
     }
 
@@ -188,7 +214,7 @@ impl Parser {
 
         let expr = self.parse_expr()?;
         let stmts = self.parse_stmts()?;
-            
+
         Ok(Some(Stmt::While(expr, Box::new(Stmt::Scope(stmts)))))
     }
 
@@ -199,7 +225,9 @@ impl Parser {
         if self.lexer.peek() != Token::Break(ldef!()) {
             return Ok(None);
         }
-        let Token::Break(loc) = self.lexer.next() else { unreachable!() };
+        let Token::Break(loc) = self.lexer.next() else {
+            unreachable!()
+        };
         self.expect(Token::Op(ldef!(), ';'))?;
         Ok(Some(Stmt::Break(loc)))
     }
@@ -211,7 +239,9 @@ impl Parser {
         if self.lexer.peek() != Token::Continue(ldef!()) {
             return Ok(None);
         }
-        let Token::Continue(loc) = self.lexer.next() else { unreachable!() };
+        let Token::Continue(loc) = self.lexer.next() else {
+            unreachable!()
+        };
         self.expect(Token::Op(ldef!(), ';'))?;
         Ok(Some(Stmt::Continue(loc)))
     }
@@ -223,12 +253,16 @@ impl Parser {
         if self.lexer.peek() != Token::Return(ldef!()) {
             return Ok(None);
         }
-        let Token::Return(loc) = self.lexer.next() else { unreachable!() };
+        let Token::Return(loc) = self.lexer.next() else {
+            unreachable!()
+        };
 
         let expr = if self.lexer.peek() != Token::Op(ldef!(), ';') {
             Some(self.parse_expr()?)
-        } else { None };
-        
+        } else {
+            None
+        };
+
         self.expect(Token::Op(ldef!(), ';'))?;
         Ok(Some(Stmt::Return(loc, expr, false, true)))
     }
@@ -237,7 +271,9 @@ impl Parser {
         if self.lexer.peek() != Token::Defer(ldef!()) {
             return Ok(None);
         }
-        let Token::Defer(loc) = self.lexer.next() else { unreachable!() };
+        let Token::Defer(loc) = self.lexer.next() else {
+            unreachable!()
+        };
         let stmt = self.parse_stmt()?;
         Ok(Some(Stmt::Defer(loc, Box::new(stmt))))
     }

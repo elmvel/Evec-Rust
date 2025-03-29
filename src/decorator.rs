@@ -1,8 +1,8 @@
-use std::collections::{HashSet, HashMap};
+use std::collections::{HashMap, HashSet};
 
+use crate::ast::*;
 use crate::lexer::Token;
 use crate::parser::ParseModule;
-use crate::ast::*;
 
 pub struct DecoratedModule {
     pub parse_module: ParseModule,
@@ -44,8 +44,8 @@ impl Decorator {
         let alias_map = &mut self.decorated_mod.parse_module.type_alias_map;
         for (_, decl) in self.decorated_mod.parse_module.function_map.iter_mut() {
             for param in decl.params.iter_mut() {
-                if param.1.kind == TypeKind::Unresolved {
-                    if let Some(typ) = alias_map.get(param.1.alias.as_ref().unwrap()) {
+                if let AstType::Alias(ref name) = param.1 {
+                    if let Some(typ) = alias_map.get(name) {
                         param.1 = typ.clone();
                     }
                 }
@@ -53,41 +53,41 @@ impl Decorator {
         }
     }
 
-    pub fn rta_global(global: &mut Global, alias_map: &HashMap<String, Type>) {
+    pub fn rta_global(global: &mut Global, alias_map: &HashMap<String, AstType>) {
         match global {
             Global::Decl(_, ref mut expr) => {
                 Self::rta_expr(expr, alias_map);
-            },
+            }
             _ => (),
         }
     }
 
-    pub fn rta_expr(expr: &mut Expr, alias_map: &HashMap<String, Type>) -> () {
+    pub fn rta_expr(expr: &mut Expr, alias_map: &HashMap<String, AstType>) -> () {
         match expr {
-            Expr::Ident(_) => { () },
-            Expr::Path(_, _) => { () },
-            Expr::Number(_) => { () },
-            Expr::String(_) => { () },
-            Expr::CString(_) => { () },
-            Expr::Bool(_) => { () },
+            Expr::Ident(_) => (),
+            Expr::Path(_, _) => (),
+            Expr::Number(_) => (),
+            Expr::String(_) => (),
+            Expr::CString(_) => (),
+            Expr::Bool(_) => (),
             Expr::BinOp(_, _, ref mut box_lhs, ref mut box_rhs) => {
                 Self::rta_expr(box_lhs, alias_map);
                 Self::rta_expr(box_rhs, alias_map);
-            },
+            }
             Expr::UnOp(_, _, box_expr, _) => {
                 Self::rta_expr(box_expr, alias_map);
-            },
+            }
             Expr::Func(_, ref mut params, ref mut ret_type, stmts, _, _) => {
                 for param in params.iter_mut() {
-                    if param.1.kind == TypeKind::Unresolved {
-                        if let Some(typ) = alias_map.get(param.1.alias.as_ref().unwrap()) {
+                    if let AstType::Alias(ref name) = param.1 {
+                        if let Some(typ) = alias_map.get(name) {
                             param.1 = typ.clone();
                         }
                     }
                 }
                 if let Some(ref mut rt) = ret_type {
-                    if rt.kind == TypeKind::Unresolved {
-                        if let Some(typ) = alias_map.get(rt.alias.as_ref().unwrap()) {
+                    if let AstType::Alias(name) = rt {
+                        if let Some(typ) = alias_map.get(name) {
                             *rt = typ.clone();
                         }
                     }
@@ -95,65 +95,67 @@ impl Decorator {
                 for stmt in stmts.iter_mut() {
                     Self::rta_stmt(stmt, alias_map);
                 }
-            },
-            Expr::FuncDecl(_, _, _, _) => { () },
+            }
+            Expr::FuncDecl(_, _, _, _) => (),
             Expr::Call(_, ref mut args) => {
                 for expr in args.iter_mut() {
                     Self::rta_expr(expr, alias_map);
                 }
-            },
-            Expr::Null(_) => { () },
+            }
+            Expr::Null(_) => (),
             Expr::InitList(_, ref mut exprs) => {
                 for expr in exprs.iter_mut() {
                     Self::rta_expr(expr, alias_map);
                 }
-            },
-            Expr::Range(_, _, _) => { () }, // TODO: I might need to do this but im lazy for now
+            }
+            Expr::Range(_, _, _) => (), // TODO: I might need to do this but im lazy for now
             Expr::Cast(_, _, ref mut typ) => {
-                if typ.kind == TypeKind::Unresolved {
-                    if let Some(typ2) = alias_map.get(typ.alias.as_ref().unwrap()) {
+                if let AstType::Alias(name) = typ {
+                    if let Some(typ2) = alias_map.get(name) {
                         *typ = typ2.clone();
                     }
                 }
-            },
+            }
         }
     }
 
-    pub fn rta_stmt(stmt: &mut Stmt, alias_map: &HashMap<String, Type>) -> () {
+    pub fn rta_stmt(stmt: &mut Stmt, alias_map: &HashMap<String, AstType>) -> () {
         match stmt {
             Stmt::Dbg(ref mut expr) => {
                 Self::rta_expr(expr, alias_map);
-            },
+            }
             Stmt::Let(_, ref mut typ, _, _) => {
                 if let Some(ref mut rt) = typ {
-                    if rt.kind == TypeKind::Unresolved {
-                        if let Some(typ2) = alias_map.get(rt.alias.as_ref().unwrap()) {
+                    if let AstType::Alias(name) = rt {
+                        if let Some(typ2) = alias_map.get(name) {
                             *rt = typ2.clone();
                         }
                     }
                 }
-            },
+            }
             Stmt::Scope(ref mut stmts) => {
                 for stmt in stmts.iter_mut() {
                     Self::rta_stmt(stmt, alias_map);
                 }
-            },
+            }
             Stmt::Ex(ref mut expr) => {
                 Self::rta_expr(expr, alias_map);
-            },
+            }
             Stmt::If(_, ref mut box_stmt, ref mut opt) => {
                 Self::rta_stmt(box_stmt, alias_map);
                 if let Some(box_else_block) = opt {
                     Self::rta_stmt(box_else_block, alias_map);
                 }
-            },
+            }
             Stmt::While(_, ref mut box_stmt) => {
                 Self::rta_stmt(box_stmt, alias_map);
-            },
-            Stmt::Break(_) => { () },
-            Stmt::Continue(_) => { () },
-            Stmt::Return(_, _, _, _) => { () },
-            Stmt::Defer(_, ref mut box_stmt) => { Self::rta_stmt(box_stmt, alias_map); },
+            }
+            Stmt::Break(_) => (),
+            Stmt::Continue(_) => (),
+            Stmt::Return(_, _, _, _) => (),
+            Stmt::Defer(_, ref mut box_stmt) => {
+                Self::rta_stmt(box_stmt, alias_map);
+            }
         }
     }
 
@@ -167,22 +169,22 @@ impl Decorator {
     pub fn rtc_global(global: &mut Global) {
         match global {
             Global::Decl(_, ref mut expr) => {
-                Self::rtc_expr(expr);  
-            },
+                Self::rtc_expr(expr);
+            }
             _ => (),
         }
     }
 
     pub fn rtc_expr(expr: &mut Expr) -> () {
         match expr {
-            Expr::Ident(_) => { () },
-            Expr::Path(_, _) => { () },
-            Expr::Number(_) => { () },
-            Expr::String(_) => { () },
-            Expr::CString(_) => { () },
-            Expr::Bool(_) => { () },
-            Expr::BinOp(_, _, _, _) => { () },
-            Expr::UnOp(_, _, _, _) => { () },
+            Expr::Ident(_) => (),
+            Expr::Path(_, _) => (),
+            Expr::Number(_) => (),
+            Expr::String(_) => (),
+            Expr::CString(_) => (),
+            Expr::Bool(_) => (),
+            Expr::BinOp(_, _, _, _) => (),
+            Expr::UnOp(_, _, _, _) => (),
             Expr::Func(_, _, _, stmts, ref mut ret, _) => {
                 let mut returns = false;
                 for stmt in stmts {
@@ -191,20 +193,20 @@ impl Decorator {
                     }
                 }
                 *ret = returns;
-            },
-            Expr::FuncDecl(_, _, _, _) => { () },
-            Expr::Call(_, _) => { () },
-            Expr::Null(_) => { () },
-            Expr::InitList(_, _) => { () },
-            Expr::Range(_, _, _) => { () },
-            Expr::Cast(_, _, _) => { () },
+            }
+            Expr::FuncDecl(_, _, _, _) => (),
+            Expr::Call(_, _) => (),
+            Expr::Null(_) => (),
+            Expr::InitList(_, _) => (),
+            Expr::Range(_, _, _) => (),
+            Expr::Cast(_, _, _) => (),
         }
     }
 
     pub fn rtc_stmt(stmt: &Stmt) -> bool {
         match stmt {
-            Stmt::Dbg(_) => { false },
-            Stmt::Let(_, _, _, _) => { false },
+            Stmt::Dbg(_) => false,
+            Stmt::Let(_, _, _, _) => false,
             Stmt::Scope(stmts) => {
                 let mut returns = false;
                 for stmt in stmts {
@@ -213,8 +215,8 @@ impl Decorator {
                     }
                 }
                 returns
-            },
-            Stmt::Ex(_) => { false },
+            }
+            Stmt::Ex(_) => false,
             Stmt::If(_, box_stmt, opt) => {
                 // A condition is not enough, since it can be false
                 // Only in if-else where both branches are always reached do we check for returns
@@ -227,14 +229,12 @@ impl Decorator {
                     returns = false;
                 }
                 returns
-            },
-            Stmt::While(_, _) => { false },
-            Stmt::Break(_) => { false },
-            Stmt::Continue(_) => { false },
-            Stmt::Return(_, _, _, _) => {
-                true
-            },
-            Stmt::Defer(_, box_stmt) => { Self::rtc_stmt(box_stmt) },
+            }
+            Stmt::While(_, _) => false,
+            Stmt::Break(_) => false,
+            Stmt::Continue(_) => false,
+            Stmt::Return(_, _, _, _) => true,
+            Stmt::Defer(_, box_stmt) => Self::rtc_stmt(box_stmt),
         }
     }
 
@@ -250,50 +250,53 @@ impl Decorator {
     pub fn gav_global(global: &Global, addrvars: &mut HashSet<String>) {
         match global {
             Global::Decl(_, expr) => Self::gav_expr(expr, addrvars),
-            _ => ()
+            _ => (),
         }
     }
 
     pub fn gav_expr(expr: &Expr, addrvars: &mut HashSet<String>) {
         match expr {
-            Expr::Ident(_) => { () },
-            Expr::Path(_, _) => { () },
-            Expr::Number(_) => { () },
-            Expr::String(_) => { () },
-            Expr::CString(_) => { () },
-            Expr::Bool(_) => { () },
+            Expr::Ident(_) => (),
+            Expr::Path(_, _) => (),
+            Expr::Number(_) => (),
+            Expr::String(_) => (),
+            Expr::CString(_) => (),
+            Expr::Bool(_) => (),
             Expr::BinOp(_, _, box_lhs, box_rhs) => {
                 Self::gav_expr(box_lhs, addrvars);
                 Self::gav_expr(box_rhs, addrvars);
-            },
+            }
             Expr::UnOp(_, op, box_expr, _) => {
                 if *op == Op::And {
                     if let Expr::Ident(Token::Ident(_, ref text)) = **box_expr {
                         addrvars.insert(text.clone());
                     }
                 }
-            },
+            }
             Expr::Func(_, _, _, stmts, _, _) => {
                 for stmt in stmts {
                     Self::gav_stmt(stmt, addrvars);
                 }
-            },
-            Expr::FuncDecl(_, _, _, _) => { () },
+            }
+            Expr::FuncDecl(_, _, _, _) => (),
             Expr::Call(name, args) => {
                 for expr in args {
                     Self::gav_expr(expr, addrvars);
                 }
-            },
-            Expr::Null(_) => { () },
+            }
+            Expr::Null(_) => (),
             Expr::InitList(_, exprs) => {
                 for expr in exprs {
                     Self::gav_expr(expr, addrvars);
                 }
-            },
-            Expr::Range(_, _, _) => { /* Even though we have expressions here, they cannot be pointers */ () },
+            }
+            Expr::Range(_, _, _) => {
+                /* Even though we have expressions here, they cannot be pointers */
+                ()
+            }
             Expr::Cast(_, box_expr, _) => {
                 Self::gav_expr(box_expr, addrvars);
-            },
+            }
         }
     }
 
@@ -301,37 +304,37 @@ impl Decorator {
         match stmt {
             Stmt::Dbg(expr) => {
                 Self::gav_expr(expr, addrvars);
-            },
+            }
             Stmt::Let(_, _, expr, _) => {
                 Self::gav_expr(expr, addrvars);
-            },
+            }
             Stmt::Scope(stmts) => {
                 for stmt in stmts {
                     Self::gav_stmt(stmt, addrvars);
                 }
-            },
+            }
             Stmt::Ex(expr) => {
                 Self::gav_expr(expr, addrvars);
-            },
+            }
             Stmt::If(expr, box_stmt, opt) => {
                 Self::gav_expr(expr, addrvars);
                 Self::gav_stmt(box_stmt, addrvars);
                 if let Some(box_else_block) = opt {
                     Self::gav_stmt(box_else_block, addrvars);
                 }
-            },
+            }
             Stmt::While(expr, box_stmt) => {
                 Self::gav_expr(expr, addrvars);
                 Self::gav_stmt(box_stmt, addrvars);
-            },
-            Stmt::Break(_) => { () },
-            Stmt::Continue(_) => { () },
+            }
+            Stmt::Break(_) => (),
+            Stmt::Continue(_) => (),
             Stmt::Return(_, opt, _, _) => {
                 if let Some(expr) = opt {
                     Self::gav_expr(expr, addrvars);
                 }
-            },
-            Stmt::Defer(_, box_stmt) => { Self::gav_stmt(box_stmt, addrvars) },
+            }
+            Stmt::Defer(_, box_stmt) => Self::gav_stmt(box_stmt, addrvars),
         }
     }
 }

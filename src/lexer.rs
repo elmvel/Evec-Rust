@@ -1,6 +1,6 @@
-use std::iter;
-use std::fmt;
 use core::iter::from_fn;
+use std::fmt;
+use std::iter;
 
 use crate::errors::SyntaxError;
 
@@ -49,7 +49,7 @@ pub enum Token {
     // Special Values
     True(Location),
     False(Location),
-    
+
     #[default]
     Eof,
 }
@@ -99,9 +99,7 @@ impl Token {
 
     pub fn is_sink_ident(&self) -> bool {
         match self {
-            Token::Ident(_, text) => {
-                text == "_"
-            },
+            Token::Ident(_, text) => text == "_",
             _ => false,
         }
     }
@@ -133,12 +131,16 @@ impl Eq for Location {}
 macro_rules! ldef {
     () => {
         Location::default()
-    }
+    };
 }
 
 impl Location {
     pub fn new(file_path: String, line: usize, column: usize) -> Self {
-        Self { file_path, line, column }
+        Self {
+            file_path,
+            line,
+            column,
+        }
     }
 }
 
@@ -164,12 +166,12 @@ impl Lexer {
             eprintln!("error: Could not find file '{input_path}'");
             std::process::exit(1);
         };
-        
+
         let mut tokens: Vec<Token> = Vec::new();
         let mut iter = input.chars().peekable();
         let mut line = 1;
         let mut col = 1;
-        
+
         // TODO: Rewrite this loop to do multi-token checks
         // do "iter.peek" or maybe just while true and check for
         // multi tokens first.
@@ -198,35 +200,39 @@ impl Lexer {
             for wchar in WIDE_CHARS {
                 if ch == wchar.0 && iter.peek().filter(|c| **c == wchar.1).is_some() {
                     iter.next();
-                    tokens.push(Token::WideOp(Location::new(input_path.into(), line, col), *wchar));
+                    tokens.push(Token::WideOp(
+                        Location::new(input_path.into(), line, col),
+                        *wchar,
+                    ));
                     col += 2;
                     continue 'outer;
                 }
             }
-            
+
             match ch {
                 '\n' => {
                     line += 1;
                     col = 1;
                     continue;
-                },
+                }
                 ch if ch.is_whitespace() => {
                     col += 1;
-                },
-                '+' | '-' | '*' | '/' | '.' | '!' | '(' | ')' |
-                '[' | ']' | ';' | '{' | '}' | '=' | ':' | '>' |
-                '<' | ',' | '&' => {
-                        tokens.push(Token::Op(Location::new(input_path.into(), line, col), ch));
-                        col += 1;
-                },
+                }
+                '+' | '-' | '*' | '/' | '.' | '!' | '(' | ')' | '[' | ']' | ';' | '{' | '}'
+                | '=' | ':' | '>' | '<' | ',' | '&' => {
+                    tokens.push(Token::Op(Location::new(input_path.into(), line, col), ch));
+                    col += 1;
+                }
                 '#' => {
                     let n: String = iter::once(ch)
-                        .chain(from_fn(|| iter.by_ref().next_if(|s| s.is_ascii_alphanumeric())))
+                        .chain(from_fn(|| {
+                            iter.by_ref().next_if(|s| s.is_ascii_alphanumeric())
+                        }))
                         .collect::<String>();
                     let loc = Location::new(input_path.into(), line, col);
                     col += n.len();
                     tokens.push(Token::Attribute(loc, n));
-                },
+                }
                 '"' => {
                     let n: String = iter::once(ch)
                         .chain(from_fn(|| iter.by_ref().next_if(|s| *s != '"')))
@@ -236,48 +242,58 @@ impl Lexer {
                     let loc = Location::new(input_path.into(), line, col);
                     col += text.len() + 1;
                     tokens.push(Token::String(loc, text.into()));
-                },
+                }
                 'a'..='z' | 'A'..='Z' | '_' => {
                     let n: String = iter::once(ch)
-                        .chain(from_fn(|| iter.by_ref().next_if(|s| s.is_ascii_alphanumeric() || *s == '_')))
+                        .chain(from_fn(|| {
+                            iter.by_ref()
+                                .next_if(|s| s.is_ascii_alphanumeric() || *s == '_')
+                        }))
                         .collect::<String>();
 
                     let loc = Location::new(input_path.into(), line, col);
                     col += n.len();
                     Self::add_ident(n, &mut tokens, loc);
-                },
+                }
                 '1'..='9' => {
                     let s: String = iter::once(ch)
                         .chain(from_fn(|| iter.by_ref().next_if(|s| s.is_ascii_digit())))
                         .collect::<String>();
                     let loc = Location::new(input_path.into(), line, col);
-                    let n: i64 = s.parse().map_err(|_| error!(loc, "Could not parse signed 64 bit integer"))?;
+                    let n: i64 = s
+                        .parse()
+                        .map_err(|_| error!(loc, "Could not parse signed 64 bit integer"))?;
 
-                    tokens.push(Token::Int(Location::new(input_path.into(), line, col), n));  
+                    tokens.push(Token::Int(Location::new(input_path.into(), line, col), n));
                     col += s.len();
-                },
+                }
                 '0' => {
                     let s: String = iter::once(ch)
                         .chain(from_fn(|| iter.by_ref().next_if(|s| *s == '0')))
                         .collect::<String>();
                     let loc = Location::new(input_path.into(), line, col);
-                    let n: i64 = s.parse().map_err(|_| error!(loc, "Could not parse signed 64 bit integer"))?;
-                    tokens.push(Token::Int(Location::new(input_path.into(), line, col), n));  
+                    let n: i64 = s
+                        .parse()
+                        .map_err(|_| error!(loc, "Could not parse signed 64 bit integer"))?;
+                    tokens.push(Token::Int(Location::new(input_path.into(), line, col), n));
                     col += s.len();
                 }
-                _ => return Err(error!(Location::new(input_path.into(), line, col), "Unknown character `{ch}`")),
+                _ => {
+                    return Err(error!(
+                        Location::new(input_path.into(), line, col),
+                        "Unknown character `{ch}`"
+                    ))
+                }
             }
         }
 
         // for token in &tokens {
         //     println!("{token:?}");
         // }
-        
+
         tokens.reverse();
-        
-        Ok(Self {
-            tokens
-        })
+
+        Ok(Self { tokens })
     }
 
     fn add_ident(id: String, tokens: &mut Vec<Token>, loc: Location) {
@@ -315,7 +331,7 @@ impl Lexer {
             "false" => Token::False(loc),
             _ => Token::Ident(loc, id),
         };
-        tokens.push(token);  
+        tokens.push(token);
     }
 
     // Note: not the most performant helpers, but easier to reason with

@@ -1,10 +1,11 @@
 use std::fmt;
 
-use crate::lexer::{Token, Location};
-use crate::parser::Result;
+use crate::const_eval::*;
 use crate::errors::SyntaxError;
 use crate::gen::Generator;
-use crate::const_eval::*;
+use crate::lexer::{Location, Token};
+use crate::parser::Result;
+use crate::Compiletime;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Op {
@@ -82,15 +83,15 @@ impl TryInto<Op> for (char, char) {
 
 #[derive(Debug)]
 pub enum Global {
-    DeclModule(Expr), // module main;
-    Import(Expr), //import std::io;
+    DeclModule(Expr),  // module main;
+    Import(Expr),      //import std::io;
     Decl(Token, Expr), // main :: <expr> \ main :: fn() { ... }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Stmt {
     Dbg(Expr),
-    Let(Token, Option<Type>, Expr, bool), // bool -> const?
+    Let(Token, Option<AstType>, Expr, bool), // bool -> const?
     Scope(Vec<Stmt>),
     Ex(Expr), // C-style: a+b; foo();
     If(Expr, Box<Stmt>, Option<Box<Stmt>>),
@@ -102,11 +103,14 @@ pub enum Stmt {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct AstParam(pub Token, pub AstType);
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Param(pub Token, pub Type);
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Expr {
-    Ident(Token), // foo
+    Ident(Token),           // foo
     Path(Token, Box<Expr>), // std::io => (String std) (::) (*Expr(io))
     Number(Token),
     String(Token),
@@ -114,13 +118,20 @@ pub enum Expr {
     Bool(Token),
     BinOp(Token, Op, Box<Expr>, Box<Expr>),
     UnOp(Token, Op, Box<Expr>, bool), // bool stores prefix/postfix
-    Func(Token, Vec<Param>, Option<Type>, Vec<Stmt>, bool, Vec<Attribute>),
-    FuncDecl(Token, Vec<Param>, Option<Type>, Vec<Attribute>),
+    Func(
+        Token,
+        Vec<AstParam>,
+        Option<AstType>,
+        Vec<Stmt>,
+        bool,
+        Vec<Attribute>,
+    ),
+    FuncDecl(Token, Vec<AstParam>, Option<AstType>, Vec<Attribute>),
     Call(Box<Expr>, Vec<Expr>), // TODO: add parameters
     Null(Token),
     InitList(Token, Vec<Expr>), // First token is just for easy location
     Range(Token, Option<Box<Expr>>, Option<Box<Expr>>),
-    Cast(Token, Box<Expr>, Type),
+    Cast(Token, Box<Expr>, AstType),
 }
 
 impl Expr {
@@ -150,36 +161,48 @@ pub enum Attribute {
     Extern(Expr),
 }
 
+// This is a recursive, syntax representation of a type
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct Type {
-    pub kind: TypeKind,
-    pub indirection: u8, // How many pointers do we have
-    pub struct_kind: StructKind,
-    // pub inner_type: u64, // We don't need this to exist now, but it should point to the typekind of the inner field?
-    pub elements: LazyExpr, // Compile time only
-    pub infer_elements: bool,
-    pub inner: Option<Box<Type>>,
-    pub alias: Option<String>,
+pub enum AstType {
+    Base(Type), // A non-recursive type, to avoid redundancy
+    Alias(String),
+    Ptr(Box<AstType>),
+    Array(LazyExpr, Box<AstType>, bool),
+    Slice(Box<AstType>),
 }
 
-impl Into<Type> for TypeKind {
-    fn into(self) -> Type {
-        Type {
-            kind: self,
-            indirection: 0,
-            struct_kind: StructKind::CountStructs,
-            elements: LazyExpr::default(),
-            infer_elements: false,
-            inner: None,
-            alias: None,
+impl AstType {
+    pub fn as_type(self, comptime: &mut Compiletime) -> Type {
+        match self {
+            AstType::Base(typ) => typ.clone(),
+            AstType::Alias(name) => todo!("Look up alias..."),
+            AstType::Ptr(box_astype) => {
+                let typ = box_astype.as_type(comptime);
+                let typeid = comptime.fetch_typeid(&typ);
+                Type::Ptr(typeid)
+            }
+            AstType::Array(lazyexpr, box_astype, _) => {
+                let typ = box_astype.as_type(comptime);
+                let typeid = comptime.fetch_typeid(&typ);
+                Type::Array(lazyexpr, typeid)
+            }
+            AstType::Slice(box_astype) => {
+                let typ = box_astype.as_type(comptime);
+                let typeid = comptime.fetch_typeid(&typ);
+                Type::Slice(typeid)
+            }
         }
     }
 }
 
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
+pub struct TypeId(pub usize);
+
+// This is a definitive internal representation of a type compiled from AstType
+// This is necessary due to the usage of a TypeId system, which cannot be known
+// during parsing.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-#[repr(u8)]
-pub enum TypeKind {
-    Unresolved,
+pub enum Type {
     Void,
     U64,
     U32,
@@ -190,113 +213,91 @@ pub enum TypeKind {
     S16,
     S8,
     Bool,
-    Structure,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-#[repr(u8)]
-pub enum StructKind {
-    Array,
-    Slice,
-    CountStructs,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum LengthInformation {
-    Elements(usize),
-    Constant(Token),
-    Unknown,
+    Ptr(TypeId),
+    Array(LazyExpr, TypeId),
+    Slice(TypeId), // Might not be correct
 }
 
 impl Type {
-    pub fn copy(other: &Type) -> Self {
-        Self {
-            kind: other.kind.clone(),
-            indirection: other.indirection,
-            struct_kind: other.struct_kind.clone(),
-            elements: other.elements.clone(),
-            infer_elements: other.infer_elements,
-            inner: other.inner.clone(),
-            alias: None,
-        }
-    }
+    // pub fn copy(other: &Type) -> Self {
+    //     Self {
+    //         kind: other.kind.clone(),
+    //         indirection: other.indirection,
+    //         struct_kind: other.struct_kind.clone(),
+    //         elements: other.elements.clone(),
+    //         infer_elements: other.infer_elements,
+    //         inner: other.inner.clone(),
+    //         alias: None,
+    //     }
+    // }
 
-    pub fn wrap(typ: Type, struct_kind: StructKind, elements: LazyExpr, infer_elements: bool) -> Self {
-        Self {
-            kind: TypeKind::Structure,
-            indirection: 0,
-            struct_kind: struct_kind,
-            elements: elements,
-            infer_elements,
-            inner: Some(Box::new(typ)),
-            alias: None,
-        }
-    }
+    // pub fn wrap(typ: Type, struct_kind: StructKind, elements: LazyExpr, infer_elements: bool) -> Self {
+    //     Self {
+    //         kind: TypeKind::Structure,
+    //         indirection: 0,
+    //         struct_kind: struct_kind,
+    //         elements: elements,
+    //         infer_elements,
+    //         inner: Some(Box::new(typ)),
+    //         alias: None,
+    //     }
+    // }
 
-    pub fn alias(name: String) -> Self {
-        let mut typ: Type = TypeKind::Unresolved.into();
-        typ.alias = Some(name);
-        typ
-    }
+    // pub fn alias(name: String) -> Self {
+    //     let mut typ: Type = TypeKind::Unresolved.into();
+    //     typ.alias = Some(name);
+    //     typ
+    // }
 
     pub fn is_struct(&self) -> bool {
-        self.kind == TypeKind::Structure
+        match self {
+            Type::Array(..) => true,
+            Type::Slice(..) => true,
+            _ => false,
+        }
     }
 
     pub fn is_ptr(&self) -> bool {
-        self.indirection > 0
-    }
-    
-    pub fn is_void_ptr(&self) -> bool {
-        self.is_ptr() && self.kind == TypeKind::Void
-    }
-    
-    pub fn ptr(&self) -> Self {
-        Self {
-            kind: self.kind.clone(),
-            indirection: self.indirection + 1,
-            struct_kind: self.struct_kind.clone(),
-            elements: self.elements.clone(),
-            infer_elements: self.infer_elements,
-            inner: self.inner.clone(),
-            alias: self.alias.clone(),
+        match self {
+            Type::Ptr(..) => true,
+            _ => false,
         }
     }
 
-    pub fn deref(&self) -> Self {
-        Self {
-            kind: self.kind.clone(),
-            indirection: self.indirection.checked_sub(1).unwrap_or(0),
-            struct_kind: self.struct_kind.clone(),
-            elements: self.elements.clone(),
-            infer_elements: self.infer_elements,
-            inner: self.inner.clone(),
-            alias: self.alias.clone(),
+    pub fn is_void_ptr(&self, comptime: &mut Compiletime) -> bool {
+        match self {
+            Type::Ptr(tid) => {
+                let result = comptime.fetch_type(*tid);
+                if let Some(inner) = result {
+                    *inner == Type::Void
+                } else {
+                    false
+                }
+            }
+            _ => false,
         }
     }
-    
-    pub fn qbe_type(&self) -> &str {
-        if self.is_ptr() {
-            return "l"; // Must be a pointer
+
+    pub fn ptr(&self, comptime: &mut Compiletime) -> Self {
+        Type::Ptr(comptime.fetch_typeid(self))
+    }
+
+    pub fn deref(&self, comptime: &Compiletime) -> Self {
+        match self {
+            Type::Ptr(tid) => comptime.fetch_type(*tid).unwrap().clone(),
+            t => t.clone(),
         }
-        match self.kind {
-            TypeKind::U64 => "l",
-            TypeKind::U32 | TypeKind::U16 | TypeKind::U8 => "w",
-            TypeKind::S64 => "l",
-            TypeKind::S32 | TypeKind::S16 | TypeKind::S8 => "w",
-            TypeKind::Void | TypeKind::Bool => "w",
-            TypeKind::Unresolved => unreachable!(),
-            TypeKind::Structure => {
-                match self.struct_kind {
-                    StructKind::Array => {
-                        "l"
-                    },
-                    StructKind::Slice => {
-                        "l"
-                    },
-                    _ => todo!("Should be able to determine the structure qbe type based on the struct id"),
-                }
-            },
+    }
+
+    pub fn qbe_type(&self) -> &str {
+        match self {
+            Type::U64 => "l",
+            Type::U32 | Type::U16 | Type::U8 => "w",
+            Type::S64 => "l",
+            Type::S32 | Type::S16 | Type::S8 => "w",
+            Type::Void | Type::Bool => "w",
+            Type::Ptr(..) => "l",
+            Type::Array(..) | Type::Slice(..) => "l",
         }
     }
 
@@ -304,7 +305,7 @@ impl Type {
     // This is strictly for temporaries, where we may want to indicate that we are
     // recieving a struct from a call
     pub fn qbe_abi_type(&self) -> &str {
-        if self.kind == TypeKind::Structure {
+        if self.is_struct() {
             self.qbe_ext_type()
         } else {
             self.qbe_type()
@@ -312,171 +313,201 @@ impl Type {
     }
 
     pub fn qbe_ext_type(&self) -> &str {
-        if self.is_ptr() {
-            return "l";
-        }
-        match self.kind {
-            TypeKind::U64 | TypeKind::S64 => "l",
-            TypeKind::U32 | TypeKind::S32 => "w",
-            TypeKind::U16 => "uh",
-            TypeKind::S16 => "sh",
-            TypeKind::U8  => "ub",
-            TypeKind::S8  => "sb",
-            TypeKind::Void | TypeKind::Bool => "w",
-            TypeKind::Unresolved => unreachable!(),
-            TypeKind::Structure => {
-                match self.struct_kind {
-                    StructKind::Array => {
-                        "l"
-                    },
-                    StructKind::Slice => {
-                        ":slice"
-                    },
-                    _ => todo!("Should be able to determine the structure qbe type based on the struct id"),
-                }
-            },
+        match self {
+            Type::U64 | Type::S64 => "l",
+            Type::U32 | Type::S32 => "w",
+            Type::U16 => "uh",
+            Type::S16 => "sh",
+            Type::U8 => "ub",
+            Type::S8 => "sb",
+            Type::Void | Type::Bool => "w",
+            Type::Ptr(..) => "l",
+            Type::Array(..) => "l",
+            Type::Slice(..) => ":slice",
         }
     }
 
-    pub fn sizeof(&self) -> usize {
-        if self.is_ptr() {
-            return 8;
-        }
-        match self.kind {
-            TypeKind::U64 | TypeKind::S64 => 8,
-            TypeKind::U32 | TypeKind::S32 => 4,
-            TypeKind::U16 | TypeKind::S16 => 2,
-            TypeKind::U8  | TypeKind::S8 => 1,
-            TypeKind::Bool => 4,
-            TypeKind::Void => 0,
-            TypeKind::Unresolved => unreachable!(),
-            TypeKind::Structure => {
-                match self.struct_kind {
-                    StructKind::Array => {
-                        let Some(ref inner) = self.inner else { unreachable!() };
-                        let constexpr = self.elements.const_resolve();
-                        match constexpr {
-                            ConstExpr::Number(n) => n as usize * inner.sizeof()
-                        }
-                    },
-                    StructKind::Slice => {
-                        16
-                    },
-                    _ => todo!("need to lookup in some strucure table"),
+    pub fn sizeof(&self, comptime: &Compiletime) -> usize {
+        match self {
+            Type::U64 | Type::S64 => 8,
+            Type::U32 | Type::S32 => 4,
+            Type::U16 | Type::S16 => 2,
+            Type::U8 | Type::S8 => 1,
+            Type::Bool => 4,
+            Type::Void => 0,
+            Type::Ptr(..) => 8,
+            Type::Array(count, tid) => {
+                let inner = comptime.fetch_type(*tid).unwrap();
+                let constexpr = count.const_resolve();
+                match constexpr {
+                    ConstExpr::Number(n) => n as usize * inner.sizeof(comptime),
                 }
-            },
+            }
+            Type::Slice(..) => 16,
         }
     }
 
     pub fn assert_number(&self, loc: Location) -> Result<()> {
-        if self.is_ptr() {
-            return Err(error!(loc, "Expected type to be a number"));
-        }
-        match self.kind {
-            TypeKind::U64 | TypeKind::U32 | TypeKind::U16 | TypeKind::U8 |
-            TypeKind::S64 | TypeKind::S32 | TypeKind::S16 | TypeKind::S8 => Ok(()),
+        match self {
+            Type::U64
+            | Type::U32
+            | Type::U16
+            | Type::U8
+            | Type::S64
+            | Type::S32
+            | Type::S16
+            | Type::S8 => Ok(()),
             _ => Err(error!(loc, "Expected type to be a number")),
         }
     }
 
     pub fn assert_comparable(&self, loc: Location) -> Result<()> {
-        if self.is_ptr() {
-            return Ok(());
-        }
-        match self.kind {
-            TypeKind::U64 | TypeKind::U32 | TypeKind::U16 | TypeKind::U8 |
-            TypeKind::S64 | TypeKind::S32 | TypeKind::S16 | TypeKind::S8 => Ok(()),
+        match self {
+            Type::U64
+            | Type::U32
+            | Type::U16
+            | Type::U8
+            | Type::S64
+            | Type::S32
+            | Type::S16
+            | Type::S8
+            | Type::Ptr(..) => Ok(()),
             _ => Err(error!(loc, "Expected type to be a number")),
         }
     }
 
     pub fn assert_bool(&self, loc: Location) -> Result<()> {
-        if self.is_ptr() {
-            return Err(error!(loc, "Expected boolean"));
-        }
-        match self.kind {
-            TypeKind::Bool => Ok(()),
+        match self {
+            Type::Bool => Ok(()),
             _ => Err(error!(loc, "Expected boolean")),
         }
     }
 
-    pub fn assert_indexable(&self, loc: Location) -> Result<()> {
+    // TODO: Probably strings at some point too
+    pub fn assert_indexable(&self, loc: Location, comptime: &Compiletime) -> Result<()> {
         if self.is_ptr() {
             return Ok(());
         }
-        if self.is_struct() {
-            match self.struct_kind {
-                StructKind::Array | StructKind::Slice => { Ok(()) },
-                _ => todo!("Probably allow slices too, but nothing else (maybe strings)"),
-            }
-        } else {
-            Err(error!(loc, "Cannot index type {self}"))
+        match self {
+            Type::Ptr(..) => Ok(()),
+            Type::Array(..) => Ok(()),
+            Type::Slice(..) => Ok(()),
+            _ => Err(error!(
+                loc,
+                "Cannot index type {}",
+                (self.display(comptime))
+            )),
         }
     }
 
     pub fn unsigned(&self) -> bool {
-        match self.kind {
-            TypeKind::U64 | TypeKind::U32 | TypeKind::U16 | TypeKind::U8 => true,
+        match self {
+            Type::U64 | Type::U32 | Type::U16 | Type::U8 => true,
             _ => false,
         }
     }
 
-    pub fn soft_equals_array(&mut self, rhs: &mut Type) -> bool {
-        if self.infer_elements && !rhs.infer_elements {
-            self.elements = rhs.elements.clone();
-            self.infer_elements = false;
+    // pub fn soft_equals_array(&mut self, rhs: &mut Type) -> bool {
+    //     if self.infer_elements && !rhs.infer_elements {
+    //         self.elements = rhs.elements.clone();
+    //         self.infer_elements = false;
+    //     }
+    //     if !self.infer_elements && rhs.infer_elements {
+    //         rhs.elements = self.elements.clone();
+    //         rhs.infer_elements = false;
+    //     }
+    //     if self.is_ptr() && rhs.is_void_ptr() {
+    //         todo!("assigning void ptr?");
+    //     }
+    //     self.soft_equals(rhs)
+    // }
+
+    pub fn check_coerce_array(&mut self, rhs: &mut Type, infer_elements: bool, comptime: &mut Compiletime) -> bool {
+        // if self.infer_elements && !rhs.infer_elements {
+        //     self.elements = rhs.elements.clone();
+        //     self.infer_elements = false;
+        // }
+        // if !self.infer_elements && rhs.infer_elements {
+        //     rhs.elements = self.elements.clone();
+        //     rhs.infer_elements = false;
+        // }
+        if infer_elements {
+            if let Type::Array(ref mut lhs_lazyexpr, _) = self {
+                if let Type::Array(ref mut rhs_lazyexpr, _) = rhs {
+                    *rhs_lazyexpr = lhs_lazyexpr.clone();
+                }
+            }
         }
-        if !self.infer_elements && rhs.infer_elements {
-            rhs.elements = self.elements.clone();
-            rhs.infer_elements = false;
-        }
-        if self.is_ptr() && rhs.is_void_ptr() {
+        if self.is_ptr() && rhs.is_void_ptr(comptime) {
             todo!("assigning void ptr?");
         }
-        self.soft_equals(rhs)
+        self.check_coerce(rhs, comptime)
     }
 
-    pub fn soft_equals(&mut self, rhs: &Type) -> bool {
+    pub fn check_coerce(&mut self, rhs: &Type, comptime: &mut Compiletime) -> bool {
         // can convert between *void <=> *type
-        if self.is_void_ptr() && rhs.is_ptr() || self.is_ptr() && rhs.is_void_ptr() {
-            *self = Type::copy(rhs);
+        if self.is_void_ptr(comptime) && rhs.is_ptr() || self.is_ptr() && rhs.is_void_ptr(comptime) {
+            *self = rhs.clone();
             return true;
         }
         self == rhs
     }
+
+    pub fn get_inner<'a>(&self, comptime: &'a Compiletime) -> Option<&'a Type> {
+        match self {
+            Type::Array(_, typeid) | Type::Slice(typeid) => {
+                comptime.fetch_type(*typeid)
+            },
+            _ => None
+        }
+    }
+
+    pub fn display(&self, comptime: &Compiletime) -> String {
+        match self {
+            Type::Void => "void".into(),
+            Type::U64 => "u64".into(),
+            Type::U32 => "u32".into(),
+            Type::U16 => "u16".into(),
+            Type::U8 => "u8".into(),
+            Type::S64 => "s64".into(),
+            Type::S32 => "s32".into(),
+            Type::S16 => "s16".into(),
+            Type::S8 => "s8".into(),
+            Type::Bool => "bool".into(),
+            Type::Ptr(tid) => format!("*{}", comptime.fetch_type(*tid).unwrap().display(comptime)),
+            Type::Array(count, tid) => {
+                let inner = comptime.fetch_type(*tid).unwrap();
+                let constexpr = count.const_resolve();
+                format!("[{}]{}", constexpr, inner.display(comptime))
+            }
+            Type::Slice(tid) => {
+                let inner = comptime.fetch_type(*tid).unwrap();
+                format!("[]{}", inner.display(comptime))
+            }
+        }
+    }
 }
 
-impl fmt::Display for Type {
+impl fmt::Display for AstType {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        for _ in 0..self.indirection {
-            write!(f, "*")?;
-        }
-        match &self.kind {
-            TypeKind::Void => write!(f, "void"),
-            TypeKind::U64 => write!(f, "u64"),
-            TypeKind::U32 => write!(f, "u32"),
-            TypeKind::U16 => write!(f, "u16"),
-            TypeKind::U8 => write!(f, "u8"),
-            TypeKind::S64 => write!(f, "s64"),
-            TypeKind::S32 => write!(f, "s32"),
-            TypeKind::S16 => write!(f, "s16"),
-            TypeKind::S8 => write!(f, "s8"),
-            TypeKind::Bool => write!(f, "bool"),
-            TypeKind::Unresolved => write!(f, "<unknown type alias>"),
-            TypeKind::Structure => {
-                match self.struct_kind {
-                    StructKind::Array => {
-                        let Some(ref inner) = self.inner else { unreachable!("idk how to error out here") };
-                        let constexpr = self.elements.const_resolve();
-                        write!(f, "[{}]{}", constexpr, *inner)
-                    }, 
-                    StructKind::Slice => {
-                        let Some(ref inner) = self.inner else { unreachable!("idk how to error out here") };
-                        write!(f, "[]{}", *inner)
-                    },
-                    _ => todo!("Another structure table call"),
-                }
+        match self {
+            AstType::Base(typ) => match typ {
+                Type::Void => write!(f, "void"),
+                Type::U64 => write!(f, "u64"),
+                Type::U32 => write!(f, "u32"),
+                Type::U16 => write!(f, "u16"),
+                Type::U8 => write!(f, "u8"),
+                Type::S64 => write!(f, "s64"),
+                Type::S32 => write!(f, "s32"),
+                Type::S16 => write!(f, "s16"),
+                Type::S8 => write!(f, "s8"),
+                Type::Bool => write!(f, "bool"),
+                _ => unreachable!("missing a case?"),
             },
+            AstType::Alias(name) => write!(f, "{name}"),
+            AstType::Ptr(box_astype) => write!(f, "*{box_astype}"),
+            AstType::Array(lazyexpr, box_astype, _) => write!(f, "[N]{box_astype}"),
+            AstType::Slice(box_astype) => write!(f, "[]{box_astype}"),
         }
     }
 }

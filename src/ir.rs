@@ -1,14 +1,19 @@
-use std::fmt;
+use std::fmt::{self, Write};
 
-use crate::ast::{Type, TypeKind, Param, Op, StructKind};
+use crate::ast::{Op, Param, Type};
 use crate::lexer::Location;
+use crate::Compiletime;
+
+pub trait BackendQBE {
+    fn dump(&self, f: &mut impl Write, comptime: &Compiletime) -> fmt::Result;
+}
 
 pub trait BackendLLVM {
-    fn dump(&self) -> String;
+    fn dump(&self, f: &mut impl Write, comptime: &Compiletime) -> fmt::Result;
 }
 
 pub trait BackendC {
-    fn dump(&self) -> String;
+    fn dump(&self, f: &mut impl Write, comptime: &Compiletime) -> fmt::Result;
 }
 
 #[derive(Clone, Debug)]
@@ -57,11 +62,11 @@ pub enum Instruction {
     Div(Value, Value),
     DivU(Value, Value),
     Call(Value, Vec<TempValue>), // TODO
-    Load(Value, Type), // ptr, as_type
-    Store(Value, Value, Type), // ptr, src, into_type
-    Alloc(Type), // TODO: will I need more?
-    Jmp(Value), // label
-    Jnz(Value, Value, Value), // test, labelT, labelF
+    Load(Value, Type),           // ptr, as_type
+    Store(Value, Value, Type),   // ptr, src, into_type
+    Alloc(Type),                 // TODO: will I need more?
+    Jmp(Value),                  // label
+    Jnz(Value, Value, Value),    // test, labelT, labelF
     Cmp(Op, Type, Value, Value),
     Cast(Value, Type, Type), // value, as_type, from_type
 }

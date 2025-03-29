@@ -3,9 +3,13 @@ module hello;
 import std::io;
 
 main :: fn() {
-    let SIZE: usize :: 3;
-    let xs: [SIZE]u32 = {};
-    dbg xs[0];
-    dbg xs[1];
-    dbg xs[2];
+    let xs: [1][1]u32 = {{1}};
+    dbg xs;
 }
+
+// /*
+// 1: addr [][] (blitted 2 into here)
+// 2: addr [] (stores u32 1)
+// 9: copy 1
+// 10: deref 9 []
+// */

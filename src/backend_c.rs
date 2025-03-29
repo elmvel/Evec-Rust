@@ -1,27 +1,48 @@
+use std::fmt::{self, Write, Display};
 use crate::ir::BackendC;
 
-use crate::lexer::Location;
 use crate::ast::*;
 use crate::ir::*;
+use crate::gen::Compiletime;
+use crate::lexer::Location;
 
-impl BackendC for TempValue {
-    fn dump(&self) -> String {
-        format!("__stack_{}", self.tag)
-    }
-}
-
-impl BackendC for Block {
-    fn dump(&self) -> String {
-        let mut stmts = String::new();
-        for stmt in &self.stmts {
-            stmts.push_str(&format!("{}", stmt.dump()));
+impl TempValue {
+    fn dump_c<'a>(&'a self, comptime: &'a Compiletime) -> impl Display + 'a {
+        struct Helper<'a>(&'a TempValue, &'a Compiletime);
+        impl<'a> Display for Helper<'a> {
+            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+                write!(f, "__stack_{}", self.0.tag)
+            }
         }
-        stmts
+        Helper(self, comptime)
     }
 }
 
-impl BackendC for Statement {
-    fn dump(&self) -> String {
-        todo!()
+impl Block {
+    fn dump_c<'a>(&'a self, comptime: &'a Compiletime) -> impl Display + 'a {
+        struct Helper<'a>(&'a Block, &'a Compiletime);
+        impl<'a> Display for Helper<'a> {
+            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+                // TODO: Value dump_c not implemented yet
+                // writeln!(f, "{}", self.0.name.dump_c(self.1))?;
+                for stmt in &self.0.stmts {
+                    write!(f, "{}", stmt.dump_c(self.1))?;
+                }
+                Ok(())
+            }
+        }
+        Helper(self, comptime)
+    }
+}
+
+impl Statement {
+    fn dump_c<'a>(&'a self, comptime: &'a Compiletime) -> impl Display + 'a {
+        struct Helper<'a>(&'a Statement, &'a Compiletime);
+        impl<'a> Display for Helper<'a> {
+            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+                todo!()
+            }
+        }
+        Helper(self, comptime)
     }
 }

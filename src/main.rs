@@ -1,31 +1,32 @@
 #![allow(warnings)] // for now
 
-use std::process::ExitCode;
 use std::path::{Path, PathBuf};
+use std::process::ExitCode;
 use std::sync::RwLock;
 
-use crate::lexer::Lexer;
-use crate::parser::Parser;
+use crate::constants::STD_LIB_PATH;
 use crate::decorator::Decorator;
 use crate::gen::Compiletime;
-use crate::constants::STD_LIB_PATH;
+use crate::lexer::Lexer;
+use crate::parser::Parser;
 use crate::target::*;
 
-#[macro_use] 
+#[macro_use]
 mod error_macro;
-#[macro_use] mod lexer;
+#[macro_use]
+mod lexer;
 mod ast;
+mod backend_c;
+mod backend_qbe;
 mod const_eval;
-mod precedence;
-mod parser;
+mod constants;
 mod decorator;
 mod errors;
 mod gen;
-mod constants;
-mod target;
 mod ir;
-mod backend_qbe;
-mod backend_c;
+mod parser;
+mod precedence;
+mod target;
 
 // https://matklad.github.io/2020/04/13/simple-but-powerful-pratt-parsing.html
 
@@ -38,7 +39,7 @@ macro_rules! expect_argument {
             eprintln!("error: Expected argument with {a} flag");
             std::process::exit(1);
         }
-    }
+    };
 }
 
 // TODO: very dumb box allocations, but maybe its fine?
@@ -62,7 +63,7 @@ struct BuildOptions {
 // TODO: handle multiple source files even though we technically take in a vector
 fn entry(input_paths: Vec<String>, options: BuildOptions) -> crate::parser::Result<()> {
     let mut decorated_modules = Vec::new();
-    
+
     for input_path in input_paths {
         let mut lexer = Lexer::new(&input_path).map_err(|e| {
             eprintln!("{e}");
@@ -71,10 +72,12 @@ fn entry(input_paths: Vec<String>, options: BuildOptions) -> crate::parser::Resu
         let mut parser = Parser::from(lexer);
 
         let path = Path::new(&input_path).file_stem().unwrap();
-        let parse_module = parser.parse(path.to_str().unwrap().to_string()).map_err(|e| {
-            eprintln!("{e}");
-            e
-        })?;
+        let parse_module = parser
+            .parse(path.to_str().unwrap().to_string())
+            .map_err(|e| {
+                eprintln!("{e}");
+                e
+            })?;
         let mut decorator = Decorator::new(parse_module);
         decorator.decorate();
         decorated_modules.push(decorator.decorated_mod);
@@ -101,33 +104,36 @@ fn main() -> ExitCode {
             "-h" | "--help" => print_help(&program),
             "-o" => {
                 expect_argument!(args, arg, options.output_name);
-            },
+            }
             "-c" => options.compile_only = true,
             "-vs" | "--verbose-shell" => options.verbose_shell = true,
             "-v" | "--verbose" => options.verbose = true,
             "-g" => {
                 if !options.target.can_debug_info() {
-                    eprintln!("error: Backend {} does not support debug information.", options.target.backend());
+                    eprintln!(
+                        "error: Backend {} does not support debug information.",
+                        options.target.backend()
+                    );
                     std::process::exit(1);
                 }
                 options.debug_info = true;
-            },
+            }
             "--assembler" => {
                 expect_argument!(args, arg, options.assembler_path);
-            },
+            }
             "-Z" | "--linker-path" => {
                 expect_argument!(args, arg, options.linker_path);
-            },
+            }
             "-z" | "--linker-arg" => {
                 let link_arg;
                 expect_argument!(args, arg, link_arg);
                 if let Some(la) = link_arg {
                     options.linker_arguments.push(la);
                 }
-            },
+            }
             "-Q" | "--qbe-path" => {
                 expect_argument!(args, arg, options.qbe_path);
-            },
+            }
             "--backend" => {
                 let backend;
                 expect_argument!(args, arg, backend);
@@ -140,10 +146,10 @@ fn main() -> ExitCode {
                             eprintln!("error: Unknown backend '{b}'.");
                             eprintln!("Known backends are: qbe, llvm, c.");
                             std::process::exit(1);
-                        },
+                        }
                     }
                 }
-            },
+            }
             arg => input_paths.push(arg.to_string()),
         }
     }
@@ -173,16 +179,25 @@ fn main() -> ExitCode {
 }
 
 fn fetch_stdlib(input_paths: &mut Vec<String>) {
-    let mut paths = std::fs::read_dir(*STD_LIB_PATH.read().unwrap()).map_err(|e| {
-        eprintln!("ERROR: Could not find the standard library at path: {}", *STD_LIB_PATH.read().unwrap());
-        std::process::exit(1);
-    }).unwrap()
+    let mut paths = std::fs::read_dir(*STD_LIB_PATH.read().unwrap())
+        .map_err(|e| {
+            eprintln!(
+                "ERROR: Could not find the standard library at path: {}",
+                *STD_LIB_PATH.read().unwrap()
+            );
+            std::process::exit(1);
+        })
+        .unwrap()
         .map(|de| de.unwrap().path())
         .collect::<Vec<PathBuf>>();
     while !paths.is_empty() {
         let path = paths.pop().unwrap();
         if path.is_dir() {
-            paths.extend(std::fs::read_dir(path).unwrap().map(|de| de.unwrap().path()));
+            paths.extend(
+                std::fs::read_dir(path)
+                    .unwrap()
+                    .map(|de| de.unwrap().path()),
+            );
         } else {
             input_paths.push(format!("{}", path.display()));
         }
@@ -196,7 +211,7 @@ fn usage(program: &str) {
 
 fn print_help(program: &str) {
     usage(program);
-        
+
     println!("\nOptions:\n");
 
     println!("  -ssa, --emit-qbe          Output QBE .ssa IR file.");

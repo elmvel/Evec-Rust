@@ -63,15 +63,27 @@ impl Target {
     pub fn from(os: Os, arch: Arch, backend: Backend) -> Self {
         Self { os, arch, backend }
     }
-    
-    pub fn os(&self) -> Os { self.os }
-    pub fn arch(&self) -> Arch { self.arch }
-    pub fn backend(&self) -> Backend { self.backend }
 
-    pub fn set_os(&mut self, os: Os) { self.os = os }
-    pub fn set_arch(&mut self, arch: Arch) { self.arch = arch }
-    pub fn set_backend(&mut self, backend: Backend) { self.backend = backend }
-    
+    pub fn os(&self) -> Os {
+        self.os
+    }
+    pub fn arch(&self) -> Arch {
+        self.arch
+    }
+    pub fn backend(&self) -> Backend {
+        self.backend
+    }
+
+    pub fn set_os(&mut self, os: Os) {
+        self.os = os
+    }
+    pub fn set_arch(&mut self, arch: Arch) {
+        self.arch = arch
+    }
+    pub fn set_backend(&mut self, backend: Backend) {
+        self.backend = backend
+    }
+
     pub fn can_debug_info(&self) -> bool {
         match self.backend {
             Backend::Qbe => false,
@@ -79,7 +91,7 @@ impl Target {
             Backend::C => true,
         }
     }
-    
+
     pub fn can_backtrace(&self) -> bool {
         self.can_debug_info()
     }

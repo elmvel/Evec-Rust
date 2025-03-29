@@ -1,5 +1,5 @@
-use std::fmt;
 use crate::lexer::Location;
+use std::fmt;
 
 #[derive(Debug)]
 pub struct SyntaxError {
@@ -9,9 +9,7 @@ pub struct SyntaxError {
 
 impl SyntaxError {
     pub fn new(location: Option<Location>, message: String) -> Self {
-        SyntaxError {
-            location, message
-        }
+        SyntaxError { location, message }
     }
 }
 
@@ -20,7 +18,7 @@ impl SyntaxError {
 //         SyntaxError::new(self.to_string())
 //     }
 // }
-// 
+//
 // impl Into<SyntaxError> for String {
 //     fn into(self) -> SyntaxError {
 //         SyntaxError::new(self)
