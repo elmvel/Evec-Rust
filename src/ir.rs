@@ -4,18 +4,6 @@ use crate::ast::{Op, Param, Type};
 use crate::lexer::Location;
 use crate::Compiletime;
 
-pub trait BackendQBE {
-    fn dump(&self, f: &mut impl Write, comptime: &Compiletime) -> fmt::Result;
-}
-
-pub trait BackendLLVM {
-    fn dump(&self, f: &mut impl Write, comptime: &Compiletime) -> fmt::Result;
-}
-
-pub trait BackendC {
-    fn dump(&self, f: &mut impl Write, comptime: &Compiletime) -> fmt::Result;
-}
-
 #[derive(Clone, Debug)]
 pub struct TempValue {
     pub typ: Type,

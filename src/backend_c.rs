@@ -1,5 +1,4 @@
 use std::fmt::{self, Write, Display};
-use crate::ir::BackendC;
 
 use crate::ast::*;
 use crate::ir::*;

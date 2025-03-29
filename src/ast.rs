@@ -407,30 +407,7 @@ impl Type {
         }
     }
 
-    // pub fn soft_equals_array(&mut self, rhs: &mut Type) -> bool {
-    //     if self.infer_elements && !rhs.infer_elements {
-    //         self.elements = rhs.elements.clone();
-    //         self.infer_elements = false;
-    //     }
-    //     if !self.infer_elements && rhs.infer_elements {
-    //         rhs.elements = self.elements.clone();
-    //         rhs.infer_elements = false;
-    //     }
-    //     if self.is_ptr() && rhs.is_void_ptr() {
-    //         todo!("assigning void ptr?");
-    //     }
-    //     self.soft_equals(rhs)
-    // }
-
     pub fn check_coerce_array(&mut self, rhs: &mut Type, infer_elements: bool, comptime: &mut Compiletime) -> bool {
-        // if self.infer_elements && !rhs.infer_elements {
-        //     self.elements = rhs.elements.clone();
-        //     self.infer_elements = false;
-        // }
-        // if !self.infer_elements && rhs.infer_elements {
-        //     rhs.elements = self.elements.clone();
-        //     rhs.infer_elements = false;
-        // }
         if infer_elements {
             if let Type::Array(ref mut lhs_lazyexpr, _) = self {
                 if let Type::Array(ref mut rhs_lazyexpr, _) = rhs {
