@@ -948,7 +948,7 @@ function l $.slice.len(l %slc) {{
                 };
 
                 if let Some(mut expected_type) = typ {
-                    expected_type = crate::const_eval::type_resolve(self, expected_type)?;
+                    expected_type = crate::const_eval::type_resolve(self, expected_type, comptime)?;
                     // TODO: refactor type checking
                     if !tv.typ.check_coerce_array(&mut expected_type, infer_elements, comptime) {
                         return Err(error!(loc, "Expected type {}, but got {} instead",
@@ -1973,7 +1973,8 @@ function l $.slice.len(l %slc) {{
                             *lazyexpr = LazyExpr::make_constant(ConstExpr::Number(n));
 
                             // Make the array
-                            let inner = comptime.fetch_type(typeid).unwrap().clone();
+                            let mut inner = comptime.fetch_type(typeid).unwrap().clone();
+                            inner = crate::const_eval::type_resolve(self, inner, comptime)?;
                             let sz = n as usize * inner.sizeof(comptime);
                             if sz == 0 {
                                 return Err(error!(
@@ -2162,6 +2163,10 @@ impl Compiletime {
 
     pub fn fetch_type(&self, tid: TypeId) -> Option<&Type> {
         self.types.get(tid.0)
+    }
+
+    pub fn fix_type(&mut self, tid: TypeId, new_type: Type) {
+        self.types[tid.0] = new_type;
     }
 }
 

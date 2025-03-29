@@ -54,3 +54,4 @@
 ../target/debug/main -Q $QBE_PATH ./rule110_stub.eve && ./b.out
 ../target/debug/main -Q $QBE_PATH ./array_default_init.eve && ./b.out
 ../target/debug/main -Q $QBE_PATH ./constant_array.eve && ./b.out
+../target/debug/main -Q $QBE_PATH ./nested_array_constant.eve && ./b.out
