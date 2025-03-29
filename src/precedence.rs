@@ -1,8 +1,8 @@
 // The general rule is that we use an odd priority as base, and bump it by one for associativity, if the operator is binary
 
 use crate::ast::Op;
-use crate::parser::Result;
 use crate::errors::SyntaxError;
+use crate::parser::Result;
 
 pub fn infix_binding_power(op: Op) -> Option<(u8, u8)> {
     let res = match op {

@@ -1,10 +1,10 @@
 use std::fmt;
 
-use crate::lexer::{Token, Location};
-use crate::parser::Result;
-use crate::gen::Generator;
 use crate::ast::*;
 use crate::errors::SyntaxError;
+use crate::gen::Generator;
+use crate::lexer::{Location, Token};
+use crate::parser::Result;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum ConstExpr {
@@ -28,41 +28,35 @@ impl LazyExpr {
             return Ok(());
         }
 
-        let Some(ref expr) = self.0 else { unreachable!() };
+        let Some(ref expr) = self.0 else {
+            unreachable!()
+        };
         let constexpr = match **expr {
-            Expr::Number(Token::Int(_, n)) => {
-                ConstExpr::Number(n)
-            },
+            Expr::Number(Token::Int(_, n)) => ConstExpr::Number(n),
             Expr::Ident(Token::Ident(ref loc, ref text)) => {
                 let expr = gen.ctx.lookup_constant(&text, loc.clone())?;
                 expr.into()
-            },
-            _ => todo!("constant evaluate {expr:?}")
+            }
+            _ => todo!("constant evaluate {expr:?}"),
         };
 
         self.0 = None;
         self.1 = Some(constexpr);
         Ok(())
     }
-    
+
     pub fn const_resolve(&self) -> ConstExpr {
         self.1.clone().unwrap()
     }
 }
 
 pub fn type_resolve(gen: &mut Generator, mut typ: Type) -> Result<Type> {
-    match typ.kind {
-        TypeKind::Structure => {
-            match typ.struct_kind {
-                StructKind::Array => {
-                    typ.elements.const_eval(gen)?;
-                    Ok(typ)
-                },
-                StructKind::Slice => Ok(typ),
-                _ => todo!()
-            }
-        },
-        _ => Ok(typ)
+    match typ {
+        Type::Array(ref mut count, _) => {
+            count.const_eval(gen)?;
+            Ok(typ)
+        }
+        _ => Ok(typ),
     }
 }
 
@@ -77,9 +71,7 @@ impl Eq for LazyExpr {}
 impl Into<Expr> for ConstExpr {
     fn into(self) -> Expr {
         match self {
-            ConstExpr::Number(i) => {
-                Expr::Number(Token::Int(ldef!(), i))
-            },
+            ConstExpr::Number(i) => Expr::Number(Token::Int(ldef!(), i)),
         }
     }
 }
@@ -87,10 +79,8 @@ impl Into<Expr> for ConstExpr {
 impl Into<ConstExpr> for Expr {
     fn into(self) -> ConstExpr {
         match self {
-            Expr::Number(Token::Int(_, i)) => {
-                ConstExpr::Number(i)
-            },
-            _ => todo!()
+            Expr::Number(Token::Int(_, i)) => ConstExpr::Number(i),
+            _ => todo!(),
         }
     }
 }
