@@ -1,9 +1,9 @@
-use std::fmt::{self, Write, Display};
+use std::fmt::{self, Display, Write};
 
 use crate::ast::*;
 use crate::const_eval::ConstExpr;
-use crate::ir::*;
 use crate::gen::Compiletime;
+use crate::ir::*;
 use crate::lexer::Location;
 
 impl TempValue {
@@ -54,28 +54,28 @@ impl TopLevel {
                             }
                         };
                         write!(f, "export function {qbe_return_type} ${name}(")?;
-                        
+
                         let mut param_count = 0;
                         write!(
                             f,
                             "{}",
                             (params
-                             .iter()
-                             .map(|Param(tag, typ)| {
-                                 let f = format!("{} %.{param_count}", typ.qbe_ext_type());
-                                 param_count += 1;
-                                 f
-                             })
-                             .collect::<Vec<String>>()
-                             .join(", "))
+                                .iter()
+                                .map(|Param(tag, typ)| {
+                                    let f = format!("{} %.{param_count}", typ.qbe_ext_type());
+                                    param_count += 1;
+                                    f
+                                })
+                                .collect::<Vec<String>>()
+                                .join(", "))
                         )?;
-                        
+
                         writeln!(f, ") {{");
-                        
+
                         for block in blocks {
                             write!(f, "{}", block.dump_qbe(self.1))?;
                         }
-                        
+
                         writeln!(f, "}}");
                         Ok(())
                     }
@@ -98,7 +98,13 @@ impl Statement {
                         } else {
                             tv.typ.qbe_type()
                         };
-                        writeln!(f, "{} ={} {}", Value::Temp(tv.clone()).dump_qbe(self.1), typ, instr.dump_qbe(self.1))
+                        writeln!(
+                            f,
+                            "{} ={} {}",
+                            Value::Temp(tv.clone()).dump_qbe(self.1),
+                            typ,
+                            instr.dump_qbe(self.1)
+                        )
                     }
                     Statement::Discard(instr) => writeln!(f, "{}", instr.dump_qbe(self.1)),
                     Statement::Raw(text) => writeln!(f, "{text}"),
@@ -161,13 +167,13 @@ impl Instruction {
                             f,
                             "{}",
                             (temps
-                             .iter()
-                             .map(|TempValue { tag, typ, .. }| {
-                                 let qtype = typ.qbe_ext_type();
-                                 format!("{qtype} %.{tag}")
-                             })
-                             .collect::<Vec<String>>()
-                             .join(", "))
+                                .iter()
+                                .map(|TempValue { tag, typ, .. }| {
+                                    let qtype = typ.qbe_ext_type();
+                                    format!("{qtype} %.{tag}")
+                                })
+                                .collect::<Vec<String>>()
+                                .join(", "))
                         )?;
                         write!(f, ")")
                     }
@@ -200,17 +206,32 @@ impl Instruction {
                                         unreachable!("user land error")
                                     };
                                     let bytes = n as usize * inner.sizeof(self.1);
-                                    write!(f, "blit {}, {}, {bytes}", v.dump_qbe(self.1), v_ptr.dump_qbe(self.1))
+                                    write!(
+                                        f,
+                                        "blit {}, {}, {bytes}",
+                                        v.dump_qbe(self.1),
+                                        v_ptr.dump_qbe(self.1)
+                                    )
                                 }
                                 Type::Slice(..) => {
                                     let bytes = typ.sizeof(self.1);
-                                    write!(f, "blit {}, {}, {bytes}", v.dump_qbe(self.1), v_ptr.dump_qbe(self.1))
+                                    write!(
+                                        f,
+                                        "blit {}, {}, {bytes}",
+                                        v.dump_qbe(self.1),
+                                        v_ptr.dump_qbe(self.1)
+                                    )
                                 }
                                 _ => todo!(),
                             }
                         } else {
                             let qtype = typ.qbe_type();
-                            write!(f, "store{qtype} {}, {}", v.dump_qbe(self.1), v_ptr.dump_qbe(self.1))
+                            write!(
+                                f,
+                                "store{qtype} {}, {}",
+                                v.dump_qbe(self.1),
+                                v_ptr.dump_qbe(self.1)
+                            )
                         }
                     }
                     Instruction::Alloc(typ) => {
@@ -221,10 +242,12 @@ impl Instruction {
                         write!(f, "jmp {}", v.dump_qbe(self.1))
                     }
                     Instruction::Jnz(v_test, v_true, v_false) => {
-                        write!(f, "jnz {}, {}, {}",
-                               v_test.dump_qbe(self.1),
-                               v_true.dump_qbe(self.1),
-                               v_false.dump_qbe(self.1)
+                        write!(
+                            f,
+                            "jnz {}, {}, {}",
+                            v_test.dump_qbe(self.1),
+                            v_true.dump_qbe(self.1),
+                            v_false.dump_qbe(self.1)
                         )
                     }
                     Instruction::Cmp(op, typ, v1, v2) => {
@@ -240,25 +263,33 @@ impl Instruction {
                         let qtyp = typ.qbe_type();
                         if op.qbe_depends_sign() {
                             if typ.unsigned() {
-                                write!(f, "cu{instr}{qtyp} {}, {}",
-                                       v1.dump_qbe(self.1),
-                                       v2.dump_qbe(self.1),
+                                write!(
+                                    f,
+                                    "cu{instr}{qtyp} {}, {}",
+                                    v1.dump_qbe(self.1),
+                                    v2.dump_qbe(self.1),
                                 )
                             } else {
-                                write!(f, "cs{instr}{qtyp} {}, {}",
-                                       v1.dump_qbe(self.1),
-                                       v2.dump_qbe(self.1),
+                                write!(
+                                    f,
+                                    "cs{instr}{qtyp} {}, {}",
+                                    v1.dump_qbe(self.1),
+                                    v2.dump_qbe(self.1),
                                 )
                             }
                         } else {
-                            write!(f, "c{instr}{qtyp} {}, {}",
-                                   v1.dump_qbe(self.1),
-                                   v2.dump_qbe(self.1),
+                            write!(
+                                f,
+                                "c{instr}{qtyp} {}, {}",
+                                v1.dump_qbe(self.1),
+                                v2.dump_qbe(self.1),
                             )
                         }
                     }
                     Instruction::Cast(v, as_typ, from_typ) => {
-                        if as_typ.assert_number(ldef!()).is_ok() && from_typ.assert_number(ldef!()).is_ok() {
+                        if as_typ.assert_number(ldef!()).is_ok()
+                            && from_typ.assert_number(ldef!()).is_ok()
+                        {
                             match from_typ {
                                 Type::U64 | Type::S64 => write!(f, "copy {}", v.dump_qbe(self.1)),
                                 Type::U32 | Type::S32 => {

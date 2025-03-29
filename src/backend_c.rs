@@ -1,8 +1,8 @@
-use std::fmt::{self, Write, Display};
+use std::fmt::{self, Display, Write};
 
 use crate::ast::*;
-use crate::ir::*;
 use crate::gen::Compiletime;
+use crate::ir::*;
 use crate::lexer::Location;
 
 impl TempValue {

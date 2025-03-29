@@ -187,7 +187,7 @@ impl FunctionContext {
 pub struct FunctionDecl {
     name: String, //TODO: remove when not needed
     // pub params: Vec<Param>,
-     pub params: Vec<AstParam>,
+    pub params: Vec<AstParam>,
     ret_type: Option<AstType>,
     pub extern_name: Option<String>,
 }
@@ -268,7 +268,11 @@ macro_rules! gen_funcall_from_funcdef {
 
             let tag = $slf.ctx.alloc();
             let txt = $text;
-            let ret_type = def.ret_type.clone().map(|at| at.as_type($comptime)).unwrap_or(Type::Void);
+            let ret_type = def
+                .ret_type
+                .clone()
+                .map(|at| at.as_type($comptime))
+                .unwrap_or(Type::Void);
             //let qt = ret_type.qbe_abi_type();
 
             let arglen = $args.len();
@@ -283,11 +287,7 @@ macro_rules! gen_funcall_from_funcdef {
             let mut stack_values = Vec::new();
             for (i, expr) in $args.drain(..).enumerate() {
                 let arg = def.params.get(i).unwrap().1.clone().as_type($comptime);
-                stack_values.push($slf.emit_expr(
-                    $comptime,
-                    expr,
-                    Some((arg, false)),
-                )?);
+                stack_values.push($slf.emit_expr($comptime, expr, Some((arg, false)))?);
             }
 
             // Type check arguments
@@ -513,9 +513,7 @@ function l $.slice.len(l %slc) {{
             FunctionDecl::new(vec![], Some(AstType::Base(Type::U64)), "len".into(), None),
         );
         let void_id = comptime.fetch_typeid(&Type::Void);
-        comptime
-            .method_map
-            .insert(Type::Slice(void_id), map);
+        comptime.method_map.insert(Type::Slice(void_id), map);
         Ok(())
     }
 
@@ -655,14 +653,9 @@ function l $.slice.len(l %slc) {{
                     };
                     let params = Self::astparams_to_params(&astparams, comptime);
                     let rt = ret_type.map(|at| at.as_type(comptime));
-                    Ok(Some(self.emit_function(
-                        comptime,
-                        params,
-                        rt,
-                        name,
-                        stmts,
-                        attrs,
-                    )?))
+                    Ok(Some(
+                        self.emit_function(comptime, params, rt, name, stmts, attrs)?,
+                    ))
                 }
                 Expr::FuncDecl(fn_, params, ret_type, _) => Ok(None),
                 _ => {
@@ -845,14 +838,15 @@ function l $.slice.len(l %slc) {{
                 ));
             }
             Type::Void => unreachable!(),
-            Type::Ptr(_) => {
-                self.block_add_raw(format!(
-                    "%.void =w call $printf(l $fmt_ptr, ..., l %.{})",
-                    val.dump_qbe(comptime)
-                ))
-            },
+            Type::Ptr(_) => self.block_add_raw(format!(
+                "%.void =w call $printf(l $fmt_ptr, ..., l %.{})",
+                val.dump_qbe(comptime)
+            )),
             Type::Array(ref lazyexpr, ref typeid) => {
-                let inner = comptime.fetch_type(*typeid).expect("Invalid typeid").clone();
+                let inner = comptime
+                    .fetch_type(*typeid)
+                    .expect("Invalid typeid")
+                    .clone();
 
                 self.block_add_raw(format!("%.void =w call $printf(l $fmt_arr_start, ...)"));
                 let constexpr = lazyexpr.const_resolve();
@@ -929,7 +923,11 @@ function l $.slice.len(l %slc) {{
                     allocate = true;
                 }
 
-                let raw = self.emit_expr(comptime, expr.clone(), typ.clone().map(|e| (e, infer_elements)))?;
+                let raw = self.emit_expr(
+                    comptime,
+                    expr.clone(),
+                    typ.clone().map(|e| (e, infer_elements)),
+                )?;
 
                 let mut tv = if allocate {
                     let tag = self.ctx.alloc();
@@ -950,10 +948,16 @@ function l $.slice.len(l %slc) {{
                 if let Some(mut expected_type) = typ {
                     expected_type = crate::const_eval::type_resolve(self, expected_type, comptime)?;
                     // TODO: refactor type checking
-                    if !tv.typ.check_coerce_array(&mut expected_type, infer_elements, comptime) {
-                        return Err(error!(loc, "Expected type {}, but got {} instead",
-                                          (expected_type.display(comptime)),
-                                          (tv.typ.display(comptime))));
+                    if !tv
+                        .typ
+                        .check_coerce_array(&mut expected_type, infer_elements, comptime)
+                    {
+                        return Err(error!(
+                            loc,
+                            "Expected type {}, but got {} instead",
+                            (expected_type.display(comptime)),
+                            (tv.typ.display(comptime))
+                        ));
                     }
                 }
 
@@ -1049,16 +1053,22 @@ function l $.slice.len(l %slc) {{
                 if let Some(expr) = opt {
                     let tv = self.emit_expr(comptime, expr, None)?;
                     if self.expected_return != tv.typ {
-                        return Err(error!(loc, "Expected to return {}, but got {} instead",
-                                          (self.expected_return.display(comptime)),
-                                          (tv.typ.display(comptime))));
+                        return Err(error!(
+                            loc,
+                            "Expected to return {}, but got {} instead",
+                            (self.expected_return.display(comptime)),
+                            (tv.typ.display(comptime))
+                        ));
                     }
                     self.block_add_discard(Instruction::Ret(Some(Value::Temp(tv))));
                 } else {
                     if self.expected_return != Type::Void {
-                        return Err(error!(loc, "Expected to return {}, but got {} instead",
-                                          (self.expected_return.display(comptime)),
-                                          (Type::Void.display(comptime))));
+                        return Err(error!(
+                            loc,
+                            "Expected to return {}, but got {} instead",
+                            (self.expected_return.display(comptime)),
+                            (Type::Void.display(comptime))
+                        ));
                     }
                     // TODO: check HACK: stupid dumb dirty annoying hack ty qbe
                     if setting_main {
@@ -1208,7 +1218,8 @@ function l $.slice.len(l %slc) {{
                         let rloc = box_rhs.loc();
 
                         let lval = self.emit_expr(comptime, *box_lhs, expected_type)?;
-                        let rval = self.emit_expr(comptime, *box_rhs, Some((lval.typ.clone(), false)))?;
+                        let rval =
+                            self.emit_expr(comptime, *box_rhs, Some((lval.typ.clone(), false)))?;
                         lval.typ.assert_number(lloc)?;
                         rval.typ.assert_number(rloc)?;
 
@@ -1250,12 +1261,18 @@ function l $.slice.len(l %slc) {{
                                 // EQ => Assigning to a variable
                                 let val = self.ctx.lookup(&text, loc.clone())?;
 
-                                let new =
-                                    self.emit_expr(comptime, *box_rhs, Some((val.typ.clone(), false)))?;
+                                let new = self.emit_expr(
+                                    comptime,
+                                    *box_rhs,
+                                    Some((val.typ.clone(), false)),
+                                )?;
                                 if val.typ != new.typ {
-                                    return Err(error!(loc, "Assignment expected {}, got {} instead",
-                                                      (val.typ.display(comptime)),
-                                                      (new.typ.display(comptime))))
+                                    return Err(error!(
+                                        loc,
+                                        "Assignment expected {}, got {} instead",
+                                        (val.typ.display(comptime)),
+                                        (new.typ.display(comptime))
+                                    ));
                                 }
                                 if val.constant {
                                     return Err(error!(loc, "Cannot assign to a constant!"));
@@ -1309,7 +1326,9 @@ function l $.slice.len(l %slc) {{
                                 let base = self.get_indexable_ptr(&lval);
 
                                 // TODO: abstract away getting "inner type"
-                                let Type::Array(_, typeid) = lval.typ else { unreachable!() };
+                                let Type::Array(_, typeid) = lval.typ else {
+                                    unreachable!()
+                                };
                                 let inner = comptime.fetch_type(typeid).unwrap();
                                 let rtag = self.ctx.alloc();
                                 let rtv = self.block_add_assign(
@@ -1337,8 +1356,11 @@ function l $.slice.len(l %slc) {{
                                     ),
                                 );
 
-                                let val =
-                                    self.emit_expr(comptime, *box_rhs, Some((inner.clone(), false)))?;
+                                let val = self.emit_expr(
+                                    comptime,
+                                    *box_rhs,
+                                    Some((inner.clone(), false)),
+                                )?;
                                 self.block_add_discard(Instruction::Store(
                                     Value::Temp(ptr_tv),
                                     Value::Temp(val.clone()),
@@ -1358,10 +1380,8 @@ function l $.slice.len(l %slc) {{
                         let lloc = box_lhs.loc();
                         let rloc = box_rhs.loc();
 
-                        let lval =
-                            self.emit_expr(comptime, *box_lhs, Some((Type::Bool, false)))?;
-                        let rval =
-                            self.emit_expr(comptime, *box_rhs, Some((Type::Bool, false)))?;
+                        let lval = self.emit_expr(comptime, *box_lhs, Some((Type::Bool, false)))?;
+                        let rval = self.emit_expr(comptime, *box_rhs, Some((Type::Bool, false)))?;
                         lval.typ.assert_bool(lloc)?;
                         rval.typ.assert_bool(rloc)?;
 
@@ -1400,10 +1420,8 @@ function l $.slice.len(l %slc) {{
                         let lloc = box_lhs.loc();
                         let rloc = box_rhs.loc();
 
-                        let lval =
-                            self.emit_expr(comptime, *box_lhs, Some((Type::Bool, false)))?;
-                        let rval =
-                            self.emit_expr(comptime, *box_rhs, Some((Type::Bool, false)))?;
+                        let lval = self.emit_expr(comptime, *box_lhs, Some((Type::Bool, false)))?;
+                        let rval = self.emit_expr(comptime, *box_rhs, Some((Type::Bool, false)))?;
                         lval.typ.assert_bool(lloc)?;
                         rval.typ.assert_bool(rloc)?;
 
@@ -1445,7 +1463,8 @@ function l $.slice.len(l %slc) {{
                         // TODO: type checking bug
                         let lval = self.emit_expr(comptime, *box_lhs, expected_type)?;
                         lval.typ.assert_comparable(lloc)?;
-                        let rval = self.emit_expr(comptime, *box_rhs, Some((lval.typ.clone(), false)))?;
+                        let rval =
+                            self.emit_expr(comptime, *box_rhs, Some((lval.typ.clone(), false)))?;
                         rval.typ.assert_comparable(rloc)?;
 
                         let tag = self.ctx.alloc();
@@ -1496,14 +1515,17 @@ function l $.slice.len(l %slc) {{
                                     let bc = self.ctx.alloc();
                                     let tv = self.block_add_assign(
                                         temp![bc, Type::U64],
-                                        Instruction::Load(
-                                            Value::Temp(tv_ptr),
-                                            Type::U64,
-                                        ),
+                                        Instruction::Load(Value::Temp(tv_ptr), Type::U64),
                                     );
                                     (tv, typeid)
                                 }
-                                _ => return Err(error!(lloc, "Cannot index type {}", (lval.typ.display(comptime)))),
+                                _ => {
+                                    return Err(error!(
+                                        lloc,
+                                        "Cannot index type {}",
+                                        (lval.typ.display(comptime))
+                                    ))
+                                }
                             };
 
                             // Make the slice
@@ -1641,10 +1663,7 @@ function l $.slice.len(l %slc) {{
                                 Value::Temp(final_count),
                                 Type::U64,
                             ));
-                            return Ok(temp![
-                                tag,
-                                slice_type
-                            ]);
+                            return Ok(temp![tag, slice_type]);
                         }
 
                         // Array
@@ -1732,10 +1751,7 @@ function l $.slice.len(l %slc) {{
                             ));
                         };
                         let built_in = Generator::type_to_builtin_check(&lval.typ, comptime);
-                        if let Some(mtd_map) = comptime
-                            .method_map
-                            .get(&built_in)
-                        {
+                        if let Some(mtd_map) = comptime.method_map.get(&built_in) {
                             if let Some(decl) = mtd_map.get(&text) {
                                 if lval.typ.is_struct() {
                                     match lval.typ {
@@ -1774,7 +1790,11 @@ function l $.slice.len(l %slc) {{
                                 ));
                             }
                         } else {
-                            Err(error!(lloc, "No methods exist for type {}", (lval.typ.display(comptime))))
+                            Err(error!(
+                                lloc,
+                                "No methods exist for type {}",
+                                (lval.typ.display(comptime))
+                            ))
                         }
                     }
                     op => todo!("all remaining binary operators: {op:?}"),
@@ -1943,7 +1963,8 @@ function l $.slice.len(l %slc) {{
                     match typ {
                         Type::Array(ref mut lazyexpr, typeid) => {
                             if infer_elements {
-                                *lazyexpr = LazyExpr::make_constant(ConstExpr::Number(exprs.len() as i64));
+                                *lazyexpr =
+                                    LazyExpr::make_constant(ConstExpr::Number(exprs.len() as i64));
                             }
                             lazyexpr.const_eval(self)?;
                             let constexpr = lazyexpr.const_resolve();
@@ -1992,7 +2013,8 @@ function l $.slice.len(l %slc) {{
                             // Get the expressions
                             let mut vals = Vec::new();
                             for expr in exprs {
-                                let val = self.emit_expr(comptime, expr, Some((inner.clone(), false)))?;
+                                let val =
+                                    self.emit_expr(comptime, expr, Some((inner.clone(), false)))?;
                                 vals.push(val);
                             }
 
@@ -2014,7 +2036,7 @@ function l $.slice.len(l %slc) {{
                                 ))
                             }
                             Ok(tv)
-                        },
+                        }
                         Type::Slice(typeid) => {
                             if exprs.len() != 2 {
                                 return Err(error!(
@@ -2027,7 +2049,8 @@ function l $.slice.len(l %slc) {{
                             let len_loc = exprs[1].loc();
                             let expr_1 = exprs.pop().unwrap();
                             let expr_0 = exprs.pop().unwrap();
-                            let ptr = self.emit_expr(comptime, expr_0, Some((inner.clone(), false)))?;
+                            let ptr =
+                                self.emit_expr(comptime, expr_0, Some((inner.clone(), false)))?;
                             let len = self.emit_expr(comptime, expr_1, None)?;
                             if !ptr.typ.is_ptr() {
                                 return Err(error!(

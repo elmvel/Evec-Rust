@@ -407,7 +407,12 @@ impl Type {
         }
     }
 
-    pub fn check_coerce_array(&mut self, rhs: &mut Type, infer_elements: bool, comptime: &mut Compiletime) -> bool {
+    pub fn check_coerce_array(
+        &mut self,
+        rhs: &mut Type,
+        infer_elements: bool,
+        comptime: &mut Compiletime,
+    ) -> bool {
         if infer_elements {
             if let Type::Array(ref mut lhs_lazyexpr, _) = self {
                 if let Type::Array(ref mut rhs_lazyexpr, _) = rhs {
@@ -423,7 +428,8 @@ impl Type {
 
     pub fn check_coerce(&mut self, rhs: &Type, comptime: &mut Compiletime) -> bool {
         // can convert between *void <=> *type
-        if self.is_void_ptr(comptime) && rhs.is_ptr() || self.is_ptr() && rhs.is_void_ptr(comptime) {
+        if self.is_void_ptr(comptime) && rhs.is_ptr() || self.is_ptr() && rhs.is_void_ptr(comptime)
+        {
             *self = rhs.clone();
             return true;
         }
@@ -432,10 +438,8 @@ impl Type {
 
     pub fn get_inner<'a>(&self, comptime: &'a Compiletime) -> Option<&'a Type> {
         match self {
-            Type::Array(_, typeid) | Type::Slice(typeid) => {
-                comptime.fetch_type(*typeid)
-            },
-            _ => None
+            Type::Array(_, typeid) | Type::Slice(typeid) => comptime.fetch_type(*typeid),
+            _ => None,
         }
     }
 
