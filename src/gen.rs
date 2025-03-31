@@ -16,8 +16,18 @@ use crate::BuildOptions;
 use crate::{Backend, SUFFIX_C, SUFFIX_LLVM, SUFFIX_QBE};
 
 type Module = HashMap<String, FunctionDecl>;
-type SymbolTable = HashMap<String, TempValue>;
+type VariableTable = HashMap<String, TempValue>;
 type ConstTable = HashMap<String, Expr>;
+
+type SymbolTable = HashMap<String, Symbol>;
+
+/////////////////////// GLOBAL SYMBOLS ///////////////////////
+
+enum Symbol {
+    Module(Module),
+    Function(FunctionDecl), //maybe not necessary?
+    TypeAlias(TypeId),
+}
 
 ////////////////////// GENERATOR MACROS //////////////////////
 
@@ -76,7 +86,7 @@ macro_rules! array_offset (
 
 #[derive(Default)]
 struct StackFrame {
-    var_table: SymbolTable,
+    var_table: VariableTable,
     const_table: ConstTable,
 }
 
@@ -389,12 +399,17 @@ impl Generator {
 
     fn import_lookup<'a>(
         &mut self,
-        comptime: &'a mut Compiletime,
+        comptime: &'a Compiletime,
         modname: &str,
     ) -> Option<&'a Module> {
         // No-op except for ? operator
         let imported_name = self.imports.get(modname)?;
-        comptime.module_map.get(modname)
+        //comptime.module_map.get(modname)
+        comptime.symbol_table.get(modname).filter(|e| { matches!(e, Symbol::Module(_)) } )
+            .map(|e| {
+                let Symbol::Module(md) = e else { unreachable!() };
+                md
+            })
     }
 
     // TODO: make more performant
@@ -416,11 +431,12 @@ impl Generator {
         }
 
         if matches.len() > 1 {
+            // TODO: Kind of lame to not look for symbols directly and not error fast
             warn!("Ambiguous path `{modname}`, choosing the first one...");
         }
 
         let name = &matches[0];
-        Some((comptime.module_map.get(name)?, matches.remove(0)))
+        Some((self.import_lookup(comptime, name)?, matches.remove(0)))
     }
 
     fn start_block(&mut self, text: &str) {
@@ -675,12 +691,17 @@ function l $.slice.len(l %slc) {{
             Global::Import(expr) => {
                 let loc = expr.loc();
                 let modname = path_to_string(expr);
-                if comptime.module_map.get(&modname).is_none() {
+                let result = comptime.symbol_table.get(&modname);
+                if result.is_none() {
                     // TODO: prettier module name
                     return Err(error!(loc, "Module `{modname}` does not exist!"));
                 }
-                self.imports.insert(modname);
-                Ok(None)
+                if let Some(Symbol::Module(_)) = result {
+                    self.imports.insert(modname);
+                    Ok(None)
+                } else {
+                    Err(error!(loc, "Global `{modname}` is not a module!"))
+                }
             }
             g => Err(error_orphan!("Unknown global {g:?}")),
         }
@@ -2123,7 +2144,8 @@ function l $.slice.len(l %slc) {{
 ////////////////////// COMPILETIME //////////////////////
 
 pub struct Compiletime {
-    module_map: HashMap<String, Module>,
+    // module_map: HashMap<String, Module>,
+    symbol_table: SymbolTable,
     method_map: HashMap<Type, HashMap<String, FunctionDecl>>,
     main_defined: bool,
     types: Vec<Type>,
@@ -2131,19 +2153,26 @@ pub struct Compiletime {
 
 impl Compiletime {
     pub fn add_module(&mut self, name: String, module: Module) {
-        if self.module_map.get(&name).is_some() {
-            self.module_map
-                .get_mut(&name)
-                .unwrap()
-                .extend(module.into_iter());
+        let result = self.symbol_table.get_mut(&name);
+        if result.is_some() {
+            if let Some(Symbol::Module(md)) = result {
+                md.extend(module.into_iter());
+            } else {
+                todo!("reaching here is an error");
+            }
         } else {
-            self.module_map.insert(name, module);
+            self.symbol_table.insert(name, Symbol::Module(module));
         }
     }
 
     pub fn get_module(&self, path: Expr) -> Option<&Module> {
         let s = path_to_string(path);
-        self.module_map.get(&s)
+        self.symbol_table.get(&s)
+            .filter(|e| { matches!(e, Symbol::Module(_)) })
+            .map(|e| {
+                let Symbol::Module(md) = e else { unreachable!() };
+                md
+            })
     }
 
     // NOTE: This function will create a typeid if it doesn't exist yet
@@ -2168,7 +2197,7 @@ impl Compiletime {
 impl Compiletime {
     pub fn new() -> Self {
         Self {
-            module_map: HashMap::new(),
+            symbol_table: HashMap::new(),
             method_map: HashMap::new(),
             main_defined: false,
             types: Vec::new(),

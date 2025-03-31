@@ -6,10 +6,3 @@ main :: fn() {
     let xs: [1][1]u32 = {{1}};
     dbg xs;
 }
-
-// /*
-// 1: addr [][] (blitted 2 into here)
-// 2: addr [] (stores u32 1)
-// 9: copy 1
-// 10: deref 9 []
-// */
