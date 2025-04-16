@@ -270,36 +270,6 @@ pub enum Type {
 }
 
 impl Type {
-    // pub fn copy(other: &Type) -> Self {
-    //     Self {
-    //         kind: other.kind.clone(),
-    //         indirection: other.indirection,
-    //         struct_kind: other.struct_kind.clone(),
-    //         elements: other.elements.clone(),
-    //         infer_elements: other.infer_elements,
-    //         inner: other.inner.clone(),
-    //         alias: None,
-    //     }
-    // }
-
-    // pub fn wrap(typ: Type, struct_kind: StructKind, elements: LazyExpr, infer_elements: bool) -> Self {
-    //     Self {
-    //         kind: TypeKind::Structure,
-    //         indirection: 0,
-    //         struct_kind: struct_kind,
-    //         elements: elements,
-    //         infer_elements,
-    //         inner: Some(Box::new(typ)),
-    //         alias: None,
-    //     }
-    // }
-
-    // pub fn alias(name: String) -> Self {
-    //     let mut typ: Type = TypeKind::Unresolved.into();
-    //     typ.alias = Some(name);
-    //     typ
-    // }
-
     pub fn is_struct(&self) -> bool {
         match self {
             Type::Array(..) => true,

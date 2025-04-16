@@ -1,4 +1,4 @@
-:i count 56
+:i count 57
 :b shell 54
 ../target/debug/main -Q $QBE_PATH ./dbg.eve && ./b.out
 :i returncode 0
@@ -732,6 +732,21 @@ Created executable b.out!
 0
 0
 0
+
+:b stderr 0
+
+:b shell 72
+../target/debug/main -Q $QBE_PATH ./nested_array_constant.eve && ./b.out
+:i returncode 0
+:b stdout 40
+Created executable b.out!
+{
+{
+1
+2
+3
+}
+}
 
 :b stderr 0
 

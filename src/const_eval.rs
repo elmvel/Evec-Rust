@@ -2,7 +2,7 @@ use std::fmt;
 
 use crate::ast::*;
 use crate::errors::SyntaxError;
-use crate::gen::Generator;
+use crate::gen::{Compiletime, Generator};
 use crate::lexer::{Location, Token};
 use crate::parser::Result;
 
@@ -50,10 +50,26 @@ impl LazyExpr {
     }
 }
 
-pub fn type_resolve(gen: &mut Generator, mut typ: Type) -> Result<Type> {
+pub fn type_resolve(
+    gen: &mut Generator,
+    mut typ: Type,
+    comptime: &mut Compiletime,
+) -> Result<Type> {
     match typ {
-        Type::Array(ref mut count, _) => {
+        Type::Array(ref mut count, ref mut typeid) => {
             count.const_eval(gen)?;
+
+            let inner = comptime.fetch_type(*typeid).unwrap().clone();
+            let resolved = type_resolve(gen, inner, comptime)?;
+            comptime.fix_type(*typeid, resolved);
+
+            Ok(typ)
+        }
+        Type::Slice(ref mut typeid) => {
+            let inner = comptime.fetch_type(*typeid).unwrap().clone();
+            let resolved = type_resolve(gen, inner, comptime)?;
+            comptime.fix_type(*typeid, resolved);
+
             Ok(typ)
         }
         _ => Ok(typ),
