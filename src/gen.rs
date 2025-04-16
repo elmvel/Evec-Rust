@@ -19,11 +19,12 @@ type Module = HashMap<String, FunctionDecl>;
 type VariableTable = HashMap<String, TempValue>;
 type ConstTable = HashMap<String, Expr>;
 
-type SymbolTable = HashMap<String, Symbol>;
+pub type SymbolTable = HashMap<String, Symbol>;
 
 /////////////////////// GLOBAL SYMBOLS ///////////////////////
 
-enum Symbol {
+#[derive(Debug)]
+pub enum Symbol {
     Module(Module),
     Function(FunctionDecl), //maybe not necessary?
     TypeAlias(TypeId),
@@ -197,7 +198,7 @@ impl FunctionContext {
 pub struct FunctionDecl {
     name: String, //TODO: remove when not needed
     // pub params: Vec<Param>,
-     pub params: Vec<AstParam>,
+    pub params: Vec<AstParam>,
     ret_type: Option<AstType>,
     pub extern_name: Option<String>,
 }
@@ -230,7 +231,7 @@ pub struct Generator {
     pub generated_mod: GeneratedModule,
     pub ctx: FunctionContext,
     expected_type: Option<Type>,
-    imports: HashSet<String>,
+    pub imports: HashSet<String>,
     expected_return: Type,
     strings: Vec<String>,
     cstrings: Vec<String>,
@@ -273,12 +274,15 @@ macro_rules! gen_funcall_from_funcdef {
     ($slf:expr, $comptime:expr, $modname:expr, $def:expr, $text:expr, $args:expr, $loc:expr) => {
         if $def.is_some() {
             let def = $def.unwrap().clone();
-            let params = Self::astparams_to_params(&def.params, $comptime);
+            let params = Self::astparams_to_params(&def.params, $comptime, $slf);
             let parlen = def.params.len();
 
             let tag = $slf.ctx.alloc();
             let txt = $text;
-            let ret_type = def.ret_type.clone().map(|at| at.as_type($comptime)).unwrap_or(Type::Void);
+            let ret_type = def.ret_type.clone().map(|at| at.as_type($comptime, $slf).map_err(|e| {
+                eprintln!("{e}");
+                std::process::exit(1);
+            }).unwrap()).unwrap_or(Type::Void);
             //let qt = ret_type.qbe_abi_type();
 
             let arglen = $args.len();
@@ -292,7 +296,10 @@ macro_rules! gen_funcall_from_funcdef {
             // Generate expressions
             let mut stack_values = Vec::new();
             for (i, expr) in $args.drain(..).enumerate() {
-                let arg = def.params.get(i).unwrap().1.clone().as_type($comptime);
+                let arg = def.params.get(i).unwrap().1.clone().as_type($comptime, $slf).map_err(|e| {
+                    eprintln!("{e}");
+                    std::process::exit(1);
+                }).unwrap();
                 stack_values.push($slf.emit_expr(
                     $comptime,
                     expr,
@@ -397,27 +404,28 @@ impl Generator {
         let _ = self.ctx.frames.pop();
     }
 
-    fn import_lookup<'a>(
+    pub fn symbol_lookup<'a>(
         &mut self,
         comptime: &'a Compiletime,
         modname: &str,
-    ) -> Option<&'a Module> {
+    ) -> Option<&'a Symbol> {
         // No-op except for ? operator
         let imported_name = self.imports.get(modname)?;
         //comptime.module_map.get(modname)
-        comptime.symbol_table.get(modname).filter(|e| { matches!(e, Symbol::Module(_)) } )
-            .map(|e| {
-                let Symbol::Module(md) = e else { unreachable!() };
-                md
-            })
+        comptime.symbol_table.get(modname)
     }
 
     // TODO: make more performant
-    fn import_lookup_fuzzy<'a>(
+    pub fn symbol_lookup_fuzzy<'a>(
         &mut self,
         comptime: &'a Compiletime,
         modname: &str,
-    ) -> Option<(&'a Module, String)> {
+        loose_fuzzy: bool
+    ) -> Option<(&'a Symbol, String)> {
+        if !loose_fuzzy && !modname.contains(MODULE_SEPARATOR) {
+            return Some((self.symbol_lookup(comptime, modname)?, modname.into()));
+        }
+        
         let mut matches = self
             .imports
             .iter()
@@ -436,7 +444,7 @@ impl Generator {
         }
 
         let name = &matches[0];
-        Some((self.import_lookup(comptime, name)?, matches.remove(0)))
+        Some((self.symbol_lookup(comptime, name)?, matches.remove(0)))
     }
 
     fn start_block(&mut self, text: &str) {
@@ -642,10 +650,13 @@ function l $.slice.len(l %slc) {{
         Ok(())
     }
 
-    fn astparams_to_params(astparams: &Vec<AstParam>, comptime: &mut Compiletime) -> Vec<Param> {
+    fn astparams_to_params(astparams: &Vec<AstParam>, comptime: &mut Compiletime, gen: &mut Generator) -> Vec<Param> {
         let mut vec = Vec::new();
         for astparam in astparams {
-            let typ = astparam.1.clone().as_type(comptime);
+            let typ = astparam.1.clone().as_type(comptime, gen).map_err(|e| {
+                eprintln!("{e}");
+                std::process::exit(1);
+            }).unwrap();
             vec.push(Param(astparam.0.clone(), typ));
         }
         vec
@@ -669,8 +680,11 @@ function l $.slice.len(l %slc) {{
                     let Token::Ident(_, text) = name.clone() else {
                         unreachable!()
                     };
-                    let params = Self::astparams_to_params(&astparams, comptime);
-                    let rt = ret_type.map(|at| at.as_type(comptime));
+                    let params = Self::astparams_to_params(&astparams, comptime, self);
+                    let rt = ret_type.map(|at| at.as_type(comptime, self).map_err(|e| {
+                        eprintln!("{e}");
+                        std::process::exit(1);
+                    }).unwrap());
                     Ok(Some(self.emit_function(
                         comptime,
                         params,
@@ -696,7 +710,7 @@ function l $.slice.len(l %slc) {{
                     // TODO: prettier module name
                     return Err(error!(loc, "Module `{modname}` does not exist!"));
                 }
-                if let Some(Symbol::Module(_)) = result {
+                if let Some(_/*Symbol::Module(_)*/) = result {
                     self.imports.insert(modname);
                     Ok(None)
                 } else {
@@ -939,7 +953,10 @@ function l $.slice.len(l %slc) {{
                 } else {
                     false
                 };
-                let typ = astype.map(|at| at.as_type(comptime));
+                let typ = astype.map(|at| at.as_type(comptime, self).map_err(|e| {
+                    eprintln!("{e}");
+                    std::process::exit(1);
+                }).unwrap());
                 let Token::Ident(loc, text) = name else {
                     unreachable!()
                 };
@@ -1197,7 +1214,10 @@ function l $.slice.len(l %slc) {{
                     .get("str")
                     .unwrap()
                     .clone()
-                    .as_type(comptime);
+                    .as_type(comptime, self).map_err(|e| {
+                        eprintln!("{e}");
+                        std::process::exit(1);
+                    }).unwrap();
                 Ok(temp![tv.tag, str_type])
             }
             Expr::CString(token) => {
@@ -1219,7 +1239,10 @@ function l $.slice.len(l %slc) {{
                     .get("cstr")
                     .unwrap()
                     .clone()
-                    .as_type(comptime);
+                    .as_type(comptime, self).map_err(|e| {
+                        eprintln!("{e}");
+                        std::process::exit(1);
+                    }).unwrap();
                 Ok(temp![tv.tag, cstr_type])
             }
             Expr::BinOp(_, op, box_lhs, box_rhs) => {
@@ -1763,13 +1786,17 @@ function l $.slice.len(l %slc) {{
                                         Type::Slice(..) => {
                                             // Built in
                                             let tag = self.ctx.alloc();
+                                            let ret_type = decl.ret_type
+                                                .clone()
+                                                .map(|at| at.as_type(comptime, self).map_err(|e| {
+                                                    eprintln!("{e}");
+                                                    std::process::exit(1);
+                                                }).unwrap())
+                                                .unwrap_or(Type::Void);
                                             let tv = self.block_add_assign(
                                                 temp![
                                                     tag,
-                                                    decl.ret_type
-                                                        .clone()
-                                                        .map(|at| at.as_type(comptime))
-                                                        .unwrap_or(Type::Void)
+                                                    ret_type
                                                 ],
                                                 // Note: for methods we pass the object by a pointer
                                                 Instruction::Call(
@@ -1904,7 +1931,7 @@ function l $.slice.len(l %slc) {{
                         let loc = token.loc();
                         let path = path_to_string(Expr::Path(token, box_expr));
                         let modname = get_module_name(path.clone());
-                        if let Some(module) = self.import_lookup(comptime, &modname) {
+                        if let Some(Symbol::Module(module)) = self.symbol_lookup(comptime, &modname) {
                             let func_name = get_func_name(path);
                             let imported_func = module.get(&func_name);
                             gen_funcall_from_funcdef!(
@@ -1917,8 +1944,8 @@ function l $.slice.len(l %slc) {{
                                 loc
                             )
                         } else {
-                            if let Some((module, absolute_name)) =
-                                self.import_lookup_fuzzy(comptime, &modname)
+                            if let Some((Symbol::Module(module), absolute_name)) =
+                                self.symbol_lookup_fuzzy(comptime, &modname, true)
                             {
                                 let func_name = get_func_name(path);
                                 let imported_func = module.get(&func_name);
@@ -1933,7 +1960,11 @@ function l $.slice.len(l %slc) {{
                                 )
                             } else {
                                 // TODO: Nicer name printing here
-                                return Err(error!(loc, "Unknown path `{modname}`"));
+                                if self.symbol_lookup_fuzzy(comptime, &modname, true).is_some() {
+                                    return Err(error!(loc, "Path `{modname}` is not a module"));
+                                } else {
+                                    return Err(error!(loc, "Unknown path `{modname}`"));
+                                }
                             }
                         }
                     }
@@ -2124,7 +2155,10 @@ function l $.slice.len(l %slc) {{
             }
             Expr::Cast(token, box_expr, to_ast_typ) => {
                 let loc = box_expr.loc();
-                let to_typ = to_ast_typ.as_type(comptime);
+                let to_typ = to_ast_typ.as_type(comptime, self).map_err(|e| {
+                    eprintln!("{e}");
+                    std::process::exit(1);
+                }).unwrap();
                 let val = self.emit_expr(comptime, *box_expr, Some((to_typ.clone(), false)))?;
                 if val.typ.assert_number(loc.clone()).is_ok() && to_typ.assert_number(loc).is_ok() {
                     let tag = self.ctx.alloc();
@@ -2145,7 +2179,7 @@ function l $.slice.len(l %slc) {{
 
 pub struct Compiletime {
     // module_map: HashMap<String, Module>,
-    symbol_table: SymbolTable,
+    pub symbol_table: SymbolTable,
     method_map: HashMap<Type, HashMap<String, FunctionDecl>>,
     main_defined: bool,
     types: Vec<Type>,
@@ -2228,6 +2262,28 @@ impl Compiletime {
         Ok(())
     }
 
+    fn collect_type_aliases(&mut self, decorated_mods: &Vec<DecoratedModule>) {
+        // Merge all type aliases with the module path name, then insert into Compiletime
+
+        // I think the changes I am doing are good
+        // However, it seems to be a challenge collecting type aliases from other modules
+        // while also respecting mutual recursion.
+        // How do I insert type aliases that refer to type aliases
+        // when those aliases have not been instantiated yet???
+
+        // Future me: Perhaps make 0 or -1 an invalid TypeId, and then just store that
+        // and patch it later? but then I have to store the correct information to patch it (do I?)
+        for decorated_mod in decorated_mods {
+            let modname = path_to_string(decorated_mod.parse_module.name.clone());
+            for (name, astype) in &decorated_mod.parse_module.type_alias_map {
+                let text = format!("{modname}{MODULE_SEPARATOR}{name}");
+                let typ = astype.clone().as_type_table(self);
+                let typeid = self.fetch_typeid(&typ);
+                self.symbol_table.insert(text, Symbol::TypeAlias(typeid));
+            }
+        }
+    }
+
     pub fn emit(
         &mut self,
         mut decorated_mods: Vec<DecoratedModule>,
@@ -2238,6 +2294,7 @@ impl Compiletime {
             let name = path_to_string(decorated_mod.parse_module.name.clone());
             self.add_module(name, decorated_mod.parse_module.function_map.clone());
         }
+        self.collect_type_aliases(&decorated_mods);
         for decorated_mod in decorated_mods.drain(..) {
             let name = decorated_mod.parse_module.file_stem.clone();
             let modname = path_to_string(decorated_mod.parse_module.name.clone());
