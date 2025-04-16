@@ -3,7 +3,7 @@ module hello;
 import std::io;
 
 main :: fn() {
-    let SIZE :: 3;
+    let SIZE := 3;
     let xs: [1][SIZE]u32 = {{1, 2, 3}};
     dbg xs;
 }
