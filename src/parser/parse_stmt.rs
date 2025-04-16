@@ -1,10 +1,10 @@
 use crate::ast::*;
 use crate::const_eval::{ConstExpr, LazyExpr};
+use crate::constants::MODULE_SEPARATOR;
 use crate::errors::SyntaxError;
 use crate::lexer::{Lexer, Location, Token};
 use crate::parser::Result;
 use crate::Parser;
-use crate::constants::MODULE_SEPARATOR;
 
 // This only bubbles out if we have a successful parse OR we have an error
 // Getting a None value signals the parser to ONLY soft fail, hence the macro
@@ -133,7 +133,7 @@ impl Parser {
                             return Err(error!(ident.loc(), "Expected identifier after `::`"));
                         }
                     }
-                    AstType::Alias(combined) 
+                    AstType::Alias(combined)
                 }
                 Token::Eof => Err(error_orphan!("Expected type but got end-of-file"))?,
                 t => Err(error!(t.loc(), "Expected type!"))?,

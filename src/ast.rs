@@ -177,15 +177,19 @@ impl AstType {
         match self {
             AstType::Base(typ) => typ.clone(),
             AstType::Alias(name) => {
-                let typeid = comptime.symbol_table.get(&name)
-                    .filter(|e| { matches!(e, Symbol::TypeAlias(_)) })
+                let typeid = comptime
+                    .symbol_table
+                    .get(&name)
+                    .filter(|e| matches!(e, Symbol::TypeAlias(_)))
                     .map(|e| {
-                        let Symbol::TypeAlias(tid) = e else { unreachable!() };
+                        let Symbol::TypeAlias(tid) = e else {
+                            unreachable!()
+                        };
                         tid
                     })
                     .unwrap();
                 comptime.fetch_type(*typeid).unwrap().clone()
-            },
+            }
             AstType::Ptr(box_astype) => {
                 let typ = box_astype.as_type_table(comptime);
                 let typeid = comptime.fetch_typeid(&typ);
@@ -203,23 +207,26 @@ impl AstType {
             }
         }
     }
-    
+
     pub fn as_type(self, comptime: &mut Compiletime, gen: &mut Generator) -> Result<Type> {
         match self {
             AstType::Base(typ) => Ok(typ.clone()),
             AstType::Alias(name) => {
-                let option = gen.symbol_lookup_fuzzy(comptime, &name, false)
-                    .filter(|e| { matches!(e, (Symbol::TypeAlias(_), _)) })
+                let option = gen
+                    .symbol_lookup_fuzzy(comptime, &name, false)
+                    .filter(|e| matches!(e, (Symbol::TypeAlias(_), _)))
                     .map(|e| {
-                        let (Symbol::TypeAlias(tid), _) = e else { unreachable!() };
+                        let (Symbol::TypeAlias(tid), _) = e else {
+                            unreachable!()
+                        };
                         tid
                     });
                 if let Some(typeid) = option {
                     Ok(comptime.fetch_type(*typeid).unwrap().clone())
                 } else {
-                    return Err(error_orphan!("Unknown type alias `{name}`"))
+                    return Err(error_orphan!("Unknown type alias `{name}`"));
                 }
-            },
+            }
             AstType::Ptr(box_astype) => {
                 let typ = box_astype.as_type(comptime, gen)?;
                 let typeid = comptime.fetch_typeid(&typ);
@@ -451,7 +458,12 @@ impl Type {
         }
     }
 
-    pub fn check_coerce_array(&mut self, rhs: &mut Type, infer_elements: bool, comptime: &mut Compiletime) -> bool {
+    pub fn check_coerce_array(
+        &mut self,
+        rhs: &mut Type,
+        infer_elements: bool,
+        comptime: &mut Compiletime,
+    ) -> bool {
         if infer_elements {
             if let Type::Array(ref mut lhs_lazyexpr, _) = self {
                 if let Type::Array(ref mut rhs_lazyexpr, _) = rhs {
@@ -467,7 +479,8 @@ impl Type {
 
     pub fn check_coerce(&mut self, rhs: &Type, comptime: &mut Compiletime) -> bool {
         // can convert between *void <=> *type
-        if self.is_void_ptr(comptime) && rhs.is_ptr() || self.is_ptr() && rhs.is_void_ptr(comptime) {
+        if self.is_void_ptr(comptime) && rhs.is_ptr() || self.is_ptr() && rhs.is_void_ptr(comptime)
+        {
             *self = rhs.clone();
             return true;
         }
@@ -476,10 +489,8 @@ impl Type {
 
     pub fn get_inner<'a>(&self, comptime: &'a Compiletime) -> Option<&'a Type> {
         match self {
-            Type::Array(_, typeid) | Type::Slice(typeid) => {
-                comptime.fetch_type(*typeid)
-            },
-            _ => None
+            Type::Array(_, typeid) | Type::Slice(typeid) => comptime.fetch_type(*typeid),
+            _ => None,
         }
     }
 
