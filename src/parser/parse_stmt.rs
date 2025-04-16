@@ -1,5 +1,6 @@
 use crate::ast::*;
 use crate::const_eval::{ConstExpr, LazyExpr};
+use crate::constants::MODULE_SEPARATOR;
 use crate::errors::SyntaxError;
 use crate::lexer::{Lexer, Location, Token};
 use crate::parser::Result;
@@ -120,7 +121,20 @@ impl Parser {
                 Token::S8(_) => AstType::Base(Type::S8),
                 Token::Bool(_) => AstType::Base(Type::Bool),
                 Token::Void(_) => AstType::Base(Type::Void),
-                Token::Ident(_, text) => AstType::Alias(text),
+                Token::Ident(_, text) => {
+                    let mut combined: String = text;
+                    while self.lexer.peek() == Token::WideOp(ldef!(), (':', ':')) {
+                        let _ = self.lexer.next();
+                        let ident = self.lexer.next();
+                        if let Token::Ident(_, text) = ident {
+                            combined.push_str(MODULE_SEPARATOR);
+                            combined.push_str(&text);
+                        } else {
+                            return Err(error!(ident.loc(), "Expected identifier after `::`"));
+                        }
+                    }
+                    AstType::Alias(combined)
+                }
                 Token::Eof => Err(error_orphan!("Expected type but got end-of-file"))?,
                 t => Err(error!(t.loc(), "Expected type!"))?,
             };
@@ -152,7 +166,7 @@ impl Parser {
             typ = Some(self.parse_type()?);
         }
 
-        if self.lexer.peek() == Token::WideOp(ldef!(), (':', ':')) {
+        if self.lexer.peek() == Token::WideOp(ldef!(), (':', '=')) {
             let _ = self.lexer.next();
             let expr = self.parse_expr()?;
             self.expect(Token::Op(ldef!(), ';'))?;

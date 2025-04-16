@@ -2,7 +2,7 @@ use std::fmt;
 
 use crate::const_eval::*;
 use crate::errors::SyntaxError;
-use crate::gen::Generator;
+use crate::gen::{Generator, Symbol, SymbolTable};
 use crate::lexer::{Location, Token};
 use crate::parser::Result;
 use crate::Compiletime;
@@ -172,24 +172,75 @@ pub enum AstType {
 }
 
 impl AstType {
-    pub fn as_type(self, comptime: &mut Compiletime) -> Type {
+    // TODO: Don't Repeat Yourself
+    pub fn as_type_table(self, comptime: &mut Compiletime) -> Type {
         match self {
             AstType::Base(typ) => typ.clone(),
-            AstType::Alias(name) => todo!("Look up alias..."),
+            AstType::Alias(name) => {
+                let typeid = comptime
+                    .symbol_table
+                    .get(&name)
+                    .filter(|e| matches!(e, Symbol::TypeAlias(_)))
+                    .map(|e| {
+                        let Symbol::TypeAlias(tid) = e else {
+                            unreachable!()
+                        };
+                        tid
+                    })
+                    .unwrap();
+                comptime.fetch_type(*typeid).unwrap().clone()
+            }
             AstType::Ptr(box_astype) => {
-                let typ = box_astype.as_type(comptime);
+                let typ = box_astype.as_type_table(comptime);
                 let typeid = comptime.fetch_typeid(&typ);
                 Type::Ptr(typeid)
             }
             AstType::Array(lazyexpr, box_astype, _) => {
-                let typ = box_astype.as_type(comptime);
+                let typ = box_astype.as_type_table(comptime);
                 let typeid = comptime.fetch_typeid(&typ);
                 Type::Array(lazyexpr, typeid)
             }
             AstType::Slice(box_astype) => {
-                let typ = box_astype.as_type(comptime);
+                let typ = box_astype.as_type_table(comptime);
                 let typeid = comptime.fetch_typeid(&typ);
                 Type::Slice(typeid)
+            }
+        }
+    }
+
+    pub fn as_type(self, comptime: &mut Compiletime, gen: &mut Generator) -> Result<Type> {
+        match self {
+            AstType::Base(typ) => Ok(typ.clone()),
+            AstType::Alias(name) => {
+                let option = gen
+                    .symbol_lookup_fuzzy(comptime, &name, false)
+                    .filter(|e| matches!(e, (Symbol::TypeAlias(_), _)))
+                    .map(|e| {
+                        let (Symbol::TypeAlias(tid), _) = e else {
+                            unreachable!()
+                        };
+                        tid
+                    });
+                if let Some(typeid) = option {
+                    Ok(comptime.fetch_type(*typeid).unwrap().clone())
+                } else {
+                    return Err(error_orphan!("Unknown type alias `{name}`"));
+                }
+            }
+            AstType::Ptr(box_astype) => {
+                let typ = box_astype.as_type(comptime, gen)?;
+                let typeid = comptime.fetch_typeid(&typ);
+                Ok(Type::Ptr(typeid))
+            }
+            AstType::Array(lazyexpr, box_astype, _) => {
+                let typ = box_astype.as_type(comptime, gen)?;
+                let typeid = comptime.fetch_typeid(&typ);
+                Ok(Type::Array(lazyexpr, typeid))
+            }
+            AstType::Slice(box_astype) => {
+                let typ = box_astype.as_type(comptime, gen)?;
+                let typeid = comptime.fetch_typeid(&typ);
+                Ok(Type::Slice(typeid))
             }
         }
     }

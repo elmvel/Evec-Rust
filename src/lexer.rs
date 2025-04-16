@@ -158,6 +158,7 @@ const WIDE_CHARS: &[(char, char)] = &[
     ('!', '='),
     ('-', '>'),
     ('.', '.'),
+    (':', '='),
 ];
 
 impl Lexer {

@@ -1,9 +1,8 @@
 module hello;
 
-import std::io;
+import foo::number;
 
 main :: fn() {
-    let SIZE :: 3;
-    let xs: [1][SIZE]u32 = {{1, 2, 3}};
+    let xs: [1][1]foo::number = {{1}};
     dbg xs;
 }
