@@ -1,11 +1,11 @@
 module hello;
 
-main :: fn() {
+main := fn() {
     let x = 5;
     let y = &x;
     dbg y;
 }
 
-foo :: fn() -> s32 {
+foo := fn() -> s32 {
     return true;
 }

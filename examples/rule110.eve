@@ -2,7 +2,7 @@ module rule110;
 
 import std::io;
 
-check :: fn(tape: [80]u8, buf: []u8, i: s32) {
+check := fn(tape: [80]u8, buf: []u8, i: s32) {
     let O = " ";
     let I = "#";
     if tape[i] == 1 && tape[i+1] == 1 && tape[i+2] == 1 {
@@ -39,7 +39,7 @@ check :: fn(tape: [80]u8, buf: []u8, i: s32) {
     }
 }
 
-main :: fn() {
+main := fn() {
     let tape: [80]u8 = {};
     tape[80 - 1] = 1;
 

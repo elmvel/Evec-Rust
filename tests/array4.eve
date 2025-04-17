@@ -1,9 +1,9 @@
 module hello;
 
-main :: fn() {
+main := fn() {
     bar({4, 6, 9, 4});
 }
 
-bar :: fn(x: [4]u32) {
+bar := fn(x: [4]u32) {
     dbg x;
 }

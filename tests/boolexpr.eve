@@ -3,7 +3,7 @@ module hello;
 // Comment test
 // int main(void) { printf("Hello world!\n"); }
 
-main :: fn() {
+main := fn() {
     dbg true  && true;
     dbg true  && false;
     dbg false && true;

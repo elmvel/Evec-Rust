@@ -1,7 +1,7 @@
 module libc::io;
 
-puts :: fn(s: cstr) -> s32 #extern("puts");
-putchar :: fn(c: s32) -> s32 #extern("putchar");
+puts := fn(s: cstr) -> s32 #extern("puts");
+putchar := fn(c: s32) -> s32 #extern("putchar");
 
-read :: fn(fd: s32, buffer: *void, size: usize) -> s64 #extern("read");
-write :: fn(fd: s32, buffer: *void, size: usize) -> s64 #extern("write");
+read := fn(fd: s32, buffer: *void, size: usize) -> s64 #extern("read");
+write := fn(fd: s32, buffer: *void, size: usize) -> s64 #extern("write");

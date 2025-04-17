@@ -1,10 +1,10 @@
 module hello;
 
-main :: fn() {
+main := fn() {
     let x: s32 = 69;
     foo(x as usize);
 }
 
-foo :: fn(u: usize) {
+foo := fn(u: usize) {
     dbg u;
 }

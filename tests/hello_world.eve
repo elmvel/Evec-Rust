@@ -1,7 +1,7 @@
 module hello;
 
-puts :: fn(text: cstr) #extern("puts");
+puts := fn(text: cstr) #extern("puts");
 
-main :: fn() {
+main := fn() {
     puts(c"Hello world");
 }

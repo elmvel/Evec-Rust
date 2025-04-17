@@ -1,6 +1,6 @@
 module hello;
 
-main :: fn() {
+main := fn() {
     let x = 69;
     dbg x;
 
@@ -11,11 +11,11 @@ main :: fn() {
 }
 
 
-foo :: fn() {
+foo := fn() {
     if true then dbg 69;
 }
 
-bar :: fn() {
+bar := fn() {
     if false {
         dbg 420;
     } else if 69 == 69 {

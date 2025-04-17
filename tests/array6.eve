@@ -1,13 +1,13 @@
 module hello;
 
-main :: fn() {
+main := fn() {
     let x: [_]u32 = {69, 420, 1337};
     dbg x;
     bar(x);
 }
 
 // Inferring here will throw an error
-bar :: fn(x: [3]u32) -> u32 {
+bar := fn(x: [3]u32) -> u32 {
     dbg x;
     return x[0];
 }

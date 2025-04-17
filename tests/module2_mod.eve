@@ -1,5 +1,5 @@
 module std::mod;
 
-b :: fn() {
+b := fn() {
     dbg 69;
 }

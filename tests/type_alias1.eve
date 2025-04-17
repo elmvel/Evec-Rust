@@ -3,7 +3,7 @@ module hello;
 type str2 = []u8;
 type cstr2 = *u8;
 
-main :: fn() {
+main := fn() {
     let xs: [_]u8 = {69, 420};
     let slc: str2 = xs[..];
     foo(slc);
@@ -11,6 +11,6 @@ main :: fn() {
     let c: cstr2 = &x;
 }
 
-foo :: fn(xs: str2) {
+foo := fn(xs: str2) {
     // nothing for now
 }

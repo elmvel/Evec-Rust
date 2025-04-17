@@ -1,6 +1,6 @@
 module hello;
 
-main :: fn() {
+main := fn() {
     let n: u8 = 69;
     let buf: *u8 = &n;
     let p: *u8 = null;

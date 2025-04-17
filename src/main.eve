@@ -1,8 +1,10 @@
 module hello;
 
-import foo::number;
+import std::io;
+import libc::io;
 
-main :: fn() {
-    let xs: [1][1]foo::number = {{1}};
+main := fn() {
+    let SIZE := 3;
+    let xs: [SIZE]u32 = {};
     dbg xs;
 }

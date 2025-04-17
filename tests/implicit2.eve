@@ -4,7 +4,7 @@ import std::io;
 import libc::io;
 import libc::mem;
 
-main :: fn() {
+main := fn() {
     uu64();
     ss64();
     uu32();
@@ -15,7 +15,7 @@ main :: fn() {
     ss8();
 }
 
-uu64 :: fn() {
+uu64 := fn() {
     let x: u64 = 69;
     let a: s64 = im x;
     let b: u32 = im x;
@@ -34,7 +34,7 @@ uu64 :: fn() {
     dbg 1000000001;
 }
 
-ss64 :: fn() {
+ss64 := fn() {
     let x: s64 = 69;
     let a: u64 = im x;
     let b: u32 = im x;
@@ -53,7 +53,7 @@ ss64 :: fn() {
     dbg 1000000001;
 }
 
-uu32 :: fn() {
+uu32 := fn() {
     let x: u32 = 69;
     let a: s32 = im x;
     let b: u64 = im x;
@@ -72,7 +72,7 @@ uu32 :: fn() {
     dbg 1000000001;
 }
 
-ss32 :: fn() {
+ss32 := fn() {
     let x: s32 = 69;
     let a: u32 = im x;
     let b: u64 = im x;
@@ -91,7 +91,7 @@ ss32 :: fn() {
     dbg 1000000001;
 }
 
-uu16 :: fn() {
+uu16 := fn() {
     let x: u16 = 69;
     let a: s16 = im x;
     let b: u64 = im x;
@@ -110,7 +110,7 @@ uu16 :: fn() {
     dbg 1000000001;
 }
 
-ss16 :: fn() {
+ss16 := fn() {
     let x: s16 = 69;
     let a: u16 = im x;
     let b: u64 = im x;
@@ -129,7 +129,7 @@ ss16 :: fn() {
     dbg 1000000001;
 }
 
-uu8 :: fn() {
+uu8 := fn() {
     let x: u8  = 69;
     let a: s8  = im x;
     let b: u64 = im x;
@@ -148,7 +148,7 @@ uu8 :: fn() {
     dbg 1000000001;
 }
 
-ss8 :: fn() {
+ss8 := fn() {
     let x: s8  = 69;
     let a: u8  = im x;
     let b: u64 = im x;

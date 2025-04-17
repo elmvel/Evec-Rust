@@ -2,7 +2,7 @@ module libc::proc;
 
 type pid = s32;
 
-fork :: fn() -> pid #extern("fork");
-execv :: fn(filename: cstr, argv: **u8) -> s32 #extern("execv");
-execve :: fn(filename: cstr, argv: **u8, env: **u8) -> s32 #extern("execve");
-execvp :: fn(filename: cstr, argv: **u8) -> s32 #extern("execvp");
+fork := fn() -> pid #extern("fork");
+execv := fn(filename: cstr, argv: **u8) -> s32 #extern("execv");
+execve := fn(filename: cstr, argv: **u8, env: **u8) -> s32 #extern("execve");
+execvp := fn(filename: cstr, argv: **u8) -> s32 #extern("execvp");

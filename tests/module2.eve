@@ -3,7 +3,7 @@ module hello;
 import std::mod;
 import std::io::mod;
 
-main :: fn() {
+main := fn() {
     io::mod::a();
     mod::b();
 }
