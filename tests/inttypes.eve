@@ -1,6 +1,6 @@
 module hello;
 
-main :: fn() {
+main := fn() {
     let x: u64 = 9223372036854775807;
     dbg x;
     let y = x;

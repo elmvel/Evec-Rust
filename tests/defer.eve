@@ -1,6 +1,6 @@
 module hello;
 
-main :: fn() {
+main := fn() {
     defer {
         dbg 1;
         dbg 2;

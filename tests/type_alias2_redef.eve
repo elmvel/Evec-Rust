@@ -4,7 +4,7 @@ type str2 = []u8;
 type cstr2 = *u8;
 type str2 = bool;
 
-main :: fn() {
+main := fn() {
     let xs: [_]u8 = {1, 2};
     let slc: str2 = xs[..];
     foo(xs[..]);
@@ -13,6 +13,6 @@ main :: fn() {
     dbg c;
 }
 
-foo :: fn(xs: []u8) {
+foo := fn(xs: []u8) {
     dbg xs[1];
 }

@@ -1,6 +1,6 @@
 module hello;
 
-main :: fn() {
+main := fn() {
     let z = 0;
     dbg succ(z);
     dbg succ(succ(z));
@@ -8,10 +8,10 @@ main :: fn() {
     dbg gt(69, 420);
 }
 
-succ :: fn(x: s32) -> s32 {
+succ := fn(x: s32) -> s32 {
     return x + 1;
 }
 
-gt :: fn(a: s32, b: s32) -> bool {
+gt := fn(a: s32, b: s32) -> bool {
     return 1;
 }

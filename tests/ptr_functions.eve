@@ -1,6 +1,6 @@
 module hello;
 
-main :: fn() {
+main := fn() {
     // Dangerous!
     let y = bar();
     *y = 1337;
@@ -12,11 +12,11 @@ main :: fn() {
     // foo(null); SIGSEGV
 }
 
-foo :: fn(p: *s32) {
+foo := fn(p: *s32) {
     *p = 420;
 }
 
-bar :: fn() -> *s32 {
+bar := fn() -> *s32 {
     let x = 5;
     return &x;
 }

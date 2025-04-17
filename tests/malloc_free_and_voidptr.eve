@@ -2,7 +2,7 @@ module hello;
 
 import libc::mem;
 
-main :: fn() {
+main := fn() {
     let xs: [_]u32 = {1, 2, 3};
     let x = xs[..];
     let p: *[]u32 = mem::malloc(16);

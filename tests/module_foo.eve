@@ -1,10 +1,10 @@
 module foo;
 
-foo :: fn() {
+foo := fn() {
     dbg 1337;
 }
 
-add :: fn() {
+add := fn() {
     let x: u64 = 380;
     let y: u64 = 15 + 5;
     dbg x + y;

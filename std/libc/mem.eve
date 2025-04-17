@@ -1,5 +1,5 @@
 module libc::mem;
 
-malloc :: fn(size: usize) -> *void #extern("malloc");
-free :: fn(ptr: *void) #extern("free");
-realloc :: fn(ptr: *void, newsize: usize) -> *void #extern("realloc");
+malloc := fn(size: usize) -> *void #extern("malloc");
+free := fn(ptr: *void) #extern("free");
+realloc := fn(ptr: *void, newsize: usize) -> *void #extern("realloc");

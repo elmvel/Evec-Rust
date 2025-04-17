@@ -1,12 +1,12 @@
 module hello;
 
-main :: fn() {
+main := fn() {
     let xs: [_]u32 = {1, 2, 3};
     let slc = slice(xs);
     dbg slc[0] + slc[1] + slc[2];
 }
 
-slice :: fn(xs: [3]u32) -> []u32 {
+slice := fn(xs: [3]u32) -> []u32 {
     let slc = xs[..];
     return slc;
 }

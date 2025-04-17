@@ -3,7 +3,7 @@ module hello;
 import std::io;
 import libc::io;
 
-main :: fn() {
+main := fn() {
     std::io::print("Hello from std io!\n");
     std::io::print("This is also a new line!\x0A");
     libc::io::puts(c"This C string is cut off early! \0 You can't read this!");

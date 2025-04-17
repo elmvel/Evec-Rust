@@ -1,12 +1,12 @@
 module hello;
 
-main :: fn() {
+main := fn() {
     let xs: [_]u32 = {1, 2, 3};
     let slc = xs[..];
     bar(slc);
 }
 
-bar :: fn(s: []u32) {
+bar := fn(s: []u32) {
     dbg s[0];
     dbg s[1];
     dbg s[2];

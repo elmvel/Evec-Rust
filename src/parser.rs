@@ -224,7 +224,7 @@ impl Parser {
         let Expr::Ident(token) = self.parse_expr_ident()? else {
             unreachable!()
         };
-        self.expect(Token::WideOp(ldef!(), (':', ':')))?;
+        self.expect(Token::WideOp(ldef!(), (':', '=')))?;
         let expr = self.parse_expr()?;
 
         if let Expr::Func(fn_, params, ret_type, stmts, returns, attrs) = expr {

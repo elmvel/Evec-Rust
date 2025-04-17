@@ -1,11 +1,11 @@
 module hello;
 
-main :: fn() {
+main := fn() {
     let xs: [_]u32 = {1, 2, 3};
     let struct: []u32 = xs[..];
     foo(&struct);
 }
 
-foo :: fn(ptr: *[]u32) {
+foo := fn(ptr: *[]u32) {
     dbg (*ptr)[2];
 }

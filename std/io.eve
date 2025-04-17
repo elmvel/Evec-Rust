@@ -2,11 +2,11 @@ module std::io;
 
 import libc::io;
 
-print :: fn(s: str) {
+print := fn(s: str) {
     libc::io::write(1, s.ptr(), s.len());
 }
 
-println :: fn(s: str) {
+println := fn(s: str) {
     let nl = "\n";
     libc::io::write(1, s.ptr(), s.len());
     libc::io::write(1, nl.ptr(), nl.len());
