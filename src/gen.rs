@@ -26,7 +26,6 @@ pub type SymbolTable = HashMap<String, Symbol>;
 #[derive(Debug)]
 pub enum Symbol {
     Module(Module),
-    Function(FunctionDecl), //maybe not necessary?
     TypeAlias(TypeId),
 }
 
@@ -423,7 +422,6 @@ impl Generator {
     ) -> Option<&'a Symbol> {
         // No-op except for ? operator
         let imported_name = self.imports.get(modname)?;
-        //comptime.module_map.get(modname)
         comptime.symbol_table.get(modname)
     }
 
@@ -1137,7 +1135,7 @@ function l $.slice.len(l %slc) {{
                             (Type::Void.display(comptime))
                         ));
                     }
-                    // TODO: check HACK: stupid dumb dirty annoying hack ty qbe
+                    // TODO: hack for qbe (not lenient on main's return)
                     if setting_main {
                         self.block_add_discard(Instruction::Ret(Some(Value::Constant("0".into()))));
                     } else {
@@ -1184,7 +1182,7 @@ function l $.slice.len(l %slc) {{
 
                 let tv = self.ctx.lookup(&text, loc)?;
                 if allocated {
-                    let deref = tv.typ.deref(comptime); // TODO: does this make sense? why would the type be a ptr
+                    let deref = tv.typ.deref(comptime);
                     let tag = self.ctx.alloc();
                     let tv_retrieved = self.block_add_assign(
                         temp![tag, tv.typ.clone()],
@@ -1381,9 +1379,7 @@ function l $.slice.len(l %slc) {{
 
                                 let deref = ptr.typ.deref(comptime);
                                 let qtype = deref.qbe_type();
-                                // TODO: won't be compatible with large data
 
-                                // genf!(self, "store{qtype} %.s{}, %.s{}", (new.tag), (ptr.tag));
                                 self.block_add_discard(Instruction::Store(
                                     Value::Temp(ptr),
                                     Value::Temp(new.clone()),
@@ -1856,8 +1852,6 @@ function l $.slice.len(l %slc) {{
                                                 ),
                                             );
                                             Ok(tv)
-                                            //genf!(self, "%.s{tag} =l call $.slice.{}(l %.s{})", text, lval);
-                                            //Ok(StackValue{tag, typ: decl.ret_type.clone().unwrap_or(TypeKind::Void.into())})
                                         }
                                         _ => todo!(),
                                     }
@@ -2074,11 +2068,10 @@ function l $.slice.len(l %slc) {{
                                         (n as usize)
                                     ));
                                 }
-                                //return Err(error!(token.loc(), "Type expected {} arguments for initializer list but got {} instead", n, (exprs.len())));
                             }
 
                             // Update the expected type with our final length
-                            // TODO I may be stupid I think this is unnecessary
+                            // TODO I think this is unnecessary
                             *lazyexpr = LazyExpr::make_constant(ConstExpr::Number(n));
 
                             // Make the array
@@ -2241,7 +2234,6 @@ function l $.slice.len(l %slc) {{
 ////////////////////// COMPILETIME //////////////////////
 
 pub struct Compiletime {
-    // module_map: HashMap<String, Module>,
     pub symbol_table: SymbolTable,
     method_map: HashMap<Type, HashMap<String, FunctionDecl>>,
     main_defined: bool,
@@ -2315,7 +2307,6 @@ impl Compiletime {
             Backend::Llvm => "llvm-as".to_string(),
             Backend::C => "cc".to_string(),
         };
-        // TODO: prob not enough
         if options.verbose_shell {
             println!("[CMD] {backend_path} {bf}{name}{suf} -o {bf}{name}.s")
         }
@@ -2333,16 +2324,6 @@ impl Compiletime {
     }
 
     fn collect_type_aliases(&mut self, decorated_mods: &Vec<DecoratedModule>) {
-        // Merge all type aliases with the module path name, then insert into Compiletime
-
-        // I think the changes I am doing are good
-        // However, it seems to be a challenge collecting type aliases from other modules
-        // while also respecting mutual recursion.
-        // How do I insert type aliases that refer to type aliases
-        // when those aliases have not been instantiated yet???
-
-        // Future me: Perhaps make 0 or -1 an invalid TypeId, and then just store that
-        // and patch it later? but then I have to store the correct information to patch it (do I?)
         for decorated_mod in decorated_mods {
             let modname = path_to_string(decorated_mod.parse_module.name.clone());
             for (name, astype) in &decorated_mod.parse_module.type_alias_map {
@@ -2397,7 +2378,6 @@ impl Compiletime {
             if options.verbose_shell {
                 println!("[CMD] {assembler_path} {debug_info} -c {bf}{name}.s -o {bf}{name}.o")
             }
-            // Rust is strange...
             let mut asm_cmd = &mut Command::new(&assembler_path);
             if debug_info.len() > 0 {
                 asm_cmd = asm_cmd.arg(debug_info);

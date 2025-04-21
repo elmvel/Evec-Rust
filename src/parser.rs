@@ -48,12 +48,6 @@ pub struct Parser {
     type_alias_map: HashMap<String, AstType>,
 }
 
-// Welcome home :/
-// Next step needed is to encapsulate the parse functions into the parser class,
-// And then start parsing globals -> functions -> statements
-
-// maybe create a wrapper for Expr for identifiers and use .into functions to go
-// between types
 impl Parser {
     pub fn from(lexer: Lexer) -> Self {
         Self {

@@ -13,18 +13,6 @@ impl SyntaxError {
     }
 }
 
-// impl Into<SyntaxError> for &str {
-//     fn into(self) -> SyntaxError {
-//         SyntaxError::new(self.to_string())
-//     }
-// }
-//
-// impl Into<SyntaxError> for String {
-//     fn into(self) -> SyntaxError {
-//         SyntaxError::new(self)
-//     }
-// }
-
 impl fmt::Display for SyntaxError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match &self.location {

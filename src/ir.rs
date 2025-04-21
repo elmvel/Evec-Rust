@@ -49,10 +49,10 @@ pub enum Instruction {
     Mul(Value, Value),
     Div(Value, Value),
     DivU(Value, Value),
-    Call(Value, Vec<TempValue>), // TODO
+    Call(Value, Vec<TempValue>),
     Load(Value, Type),           // ptr, as_type
     Store(Value, Value, Type),   // ptr, src, into_type
-    Alloc(Type),                 // TODO: will I need more?
+    Alloc(Type),
     Jmp(Value),                  // label
     Jnz(Value, Value, Value),    // test, labelT, labelF
     Cmp(Op, Type, Value, Value),

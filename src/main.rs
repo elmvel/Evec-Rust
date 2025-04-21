@@ -42,8 +42,6 @@ macro_rules! expect_argument {
     };
 }
 
-// TODO: very dumb box allocations, but maybe its fine?
-
 #[derive(Default)]
 struct BuildOptions {
     emit_qbe: bool,
@@ -60,7 +58,6 @@ struct BuildOptions {
     target: Target,
 }
 
-// TODO: handle multiple source files even though we technically take in a vector
 fn entry(input_paths: Vec<String>, options: BuildOptions) -> crate::parser::Result<()> {
     let mut decorated_modules = Vec::new();
 
@@ -161,9 +158,6 @@ fn main() -> ExitCode {
 
     fetch_stdlib(&mut input_paths);
 
-    // if options.target.backend() != Backend::Qbe {
-    //     todo!("Handling other backends are not supported yet! I need to add infrastructure in ir.rs");
-    // }
     if options.verbose {
         println!(
             "Targetting {}-{}, using the {} backend.",

@@ -173,9 +173,6 @@ impl Lexer {
         let mut line = 1;
         let mut col = 1;
 
-        // TODO: Rewrite this loop to do multi-token checks
-        // do "iter.peek" or maybe just while true and check for
-        // multi tokens first.
         'outer: while true {
             let Some(ch) = iter.next() else { break };
             if ch == '/' && iter.peek().filter(|c| **c == '/').is_some() {
@@ -287,10 +284,6 @@ impl Lexer {
                 }
             }
         }
-
-        // for token in &tokens {
-        //     println!("{token:?}");
-        // }
 
         tokens.reverse();
 

@@ -127,7 +127,7 @@ pub enum Expr {
         Vec<Attribute>,
     ),
     FuncDecl(Token, Vec<AstParam>, Option<AstType>, Vec<Attribute>),
-    Call(Box<Expr>, Vec<Expr>), // TODO: add parameters
+    Call(Box<Expr>, Vec<Expr>),
     Null(Token),
     InitList(Token, Vec<Expr>), // First token is just for easy location
     Range(Token, Option<Box<Expr>>, Option<Box<Expr>>),
@@ -266,7 +266,7 @@ pub enum Type {
     Bool,
     Ptr(TypeId),
     Array(LazyExpr, TypeId),
-    Slice(TypeId), // Might not be correct
+    Slice(TypeId),
 }
 
 impl Type {

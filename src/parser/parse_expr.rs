@@ -59,7 +59,6 @@ impl Parser {
     }
 
     pub fn parse_expr_term(&mut self) -> Result<Expr> {
-        //todo!("Implement parsing function call term here (it may also support a path too, so make sure to have a match case in the gen.rs)");
         let expr = if let Some(call) = self.parse_expr_funcall() {
             call
         } else {
@@ -154,8 +153,6 @@ impl Parser {
         // These are term expressions i.e. primary expressions
         let mut lhs = self.parse_expr_term()?;
         loop {
-            // TODO: the termination condition could potentially not be sufficient in the future
-            // This is
             let op = match self.lexer.peek() {
                 Token::Eof => break,
                 Token::Op(_, op) => {

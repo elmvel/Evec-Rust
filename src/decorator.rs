@@ -108,7 +108,7 @@ impl Decorator {
                     Self::rta_expr(expr, alias_map);
                 }
             }
-            Expr::Range(_, _, _) => (), // TODO: I might need to do this but im lazy for now
+            Expr::Range(_, _, _) => (), // TODO: Probably need to recurse here
             Expr::Cast(_, _, ref mut typ) => {
                 if let AstType::Alias(name) = typ {
                     if let Some(typ2) = alias_map.get(name) {
