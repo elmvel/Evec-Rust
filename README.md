@@ -18,7 +18,6 @@ Eve is a procedural programming language implemented in Rust as an educational e
 - [x] C FFI
 - [ ] Module system
 - [ ] Pattern Matching
-- [ ] Goal List (Soon)
 
 ## Getting Started
 
