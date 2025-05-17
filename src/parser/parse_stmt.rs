@@ -302,8 +302,7 @@ impl Parser {
         let mut arms = Vec::new();
 
         let expr = self.parse_expr()?;
-        self.expect(Token::Op(ldef!(), '{'))?;
-        while self.lexer.peek() != Token::Op(ldef!(), '}') {
+        if self.lexer.peek() == Token::When(ldef!()) {
             self.expect(Token::When(ldef!()))?;
             let pat = self.parse_pattern()?;
             self.expect(Token::WideOp(ldef!(), ('-', '>')))?;
@@ -313,8 +312,21 @@ impl Parser {
                 vec![self.parse_stmt()?]
             };
             arms.push((pat, stmts));
+        } else {
+            self.expect(Token::Op(ldef!(), '{'))?;
+            while self.lexer.peek() != Token::Op(ldef!(), '}') {
+                self.expect(Token::When(ldef!()))?;
+                let pat = self.parse_pattern()?;
+                self.expect(Token::WideOp(ldef!(), ('-', '>')))?;
+                let stmts = if self.lexer.peek() == Token::Op(ldef!(), '{') {
+                    self.parse_stmts()?
+                } else {
+                    vec![self.parse_stmt()?]
+                };
+                arms.push((pat, stmts));
+            }
+            self.expect(Token::Op(ldef!(), '}'))?;
         }
-        self.expect(Token::Op(ldef!(), '}'))?;
 
         Ok(Some(Stmt::CaseWhen(expr, arms)))
     }
