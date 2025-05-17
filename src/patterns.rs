@@ -305,6 +305,9 @@ impl Transformer {
                         // ((start, stop), Constructor::Range(start, stop))
                         todo!("ok I really don't know how to resolve this one")
                     },
+                    Pattern::Sink => {
+                        todo!("supporting sink variable patterns with integers")
+                    },
                     _ => unreachable!(),
                 };
 

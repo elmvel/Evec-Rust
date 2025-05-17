@@ -1,0 +1,19 @@
+module hello;
+
+import std::io;
+
+test := fn(x: s32) {
+    case x {
+        when 10 -> {
+            io::println("X was equal to 10!");
+        }
+        when 5 -> dbg 69;
+        when a -> dbg a;
+    }
+}
+
+main := fn() {
+    test(5);
+    test(10);
+    test(7);
+}

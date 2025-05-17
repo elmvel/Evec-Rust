@@ -1,4 +1,4 @@
-:i count 57
+:i count 58
 :b shell 54
 ../target/debug/main -Q $QBE_PATH ./dbg.eve && ./b.out
 :i returncode 0
@@ -747,6 +747,17 @@ Created executable b.out!
 3
 }
 }
+
+:b stderr 0
+
+:b shell 60
+../target/debug/main -Q $QBE_PATH ./casewhen1.eve && ./b.out
+:i returncode 0
+:b stdout 50
+Created executable b.out!
+X was equal to 10!
+69
+7
 
 :b stderr 0
 
