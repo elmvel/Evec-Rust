@@ -5,6 +5,7 @@ use crate::errors::SyntaxError;
 use crate::gen::{Generator, Symbol, SymbolTable};
 use crate::lexer::{Location, Token};
 use crate::parser::Result;
+use crate::patterns::{Row, Pattern};
 use crate::Compiletime;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -100,6 +101,7 @@ pub enum Stmt {
     Continue(Location),
     Return(Location, Option<Expr>, bool, bool), // bools are ugly hacks
     Defer(Location, Box<Stmt>),
+    CaseWhen(Expr, Vec<(Pattern, Vec<Stmt>)>),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]

@@ -1,10 +1,19 @@
 module hello;
 
 import std::io;
-import libc::io;
+
+test := fn(x: s32) {
+    case x {
+        when 10 -> {
+            io::println("X was equal to 10!");
+        }
+        when 5 -> dbg 69;
+        when a -> dbg a;
+    }
+}
 
 main := fn() {
-    let SIZE := 3;
-    let xs: [SIZE]u32 = {};
-    dbg xs;
+    test(5);
+    test(10);
+    test(7);
 }

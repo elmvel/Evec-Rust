@@ -4,7 +4,7 @@ use crate::ast::{Op, Param, Type};
 use crate::lexer::Location;
 use crate::Compiletime;
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct TempValue {
     pub typ: Type,
     pub tag: usize,
