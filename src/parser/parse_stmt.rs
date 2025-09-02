@@ -4,6 +4,7 @@ use crate::constants::MODULE_SEPARATOR;
 use crate::errors::SyntaxError;
 use crate::lexer::{Lexer, Location, Token};
 use crate::parser::Result;
+use crate::patterns::{Row, Body};
 use crate::Parser;
 
 // This only bubbles out if we have a successful parse OR we have an error
@@ -42,6 +43,7 @@ impl Parser {
         bubble_stmt!(self.parse_stmt_continue());
         bubble_stmt!(self.parse_stmt_return());
         bubble_stmt!(self.parse_stmt_defer());
+        bubble_stmt!(self.parse_stmt_casewhen());
 
         bubble_stmt!(self.parse_stmt_expr());
 
@@ -290,6 +292,43 @@ impl Parser {
         };
         let stmt = self.parse_stmt()?;
         Ok(Some(Stmt::Defer(loc, Box::new(stmt))))
+    }
+
+    pub fn parse_stmt_casewhen(&mut self) -> Result<Option<Stmt>> {
+        if self.lexer.peek() != Token::Case(ldef!()) {
+            return Ok(None);
+        }
+        self.lexer.next();
+        let mut arms = Vec::new();
+
+        let expr = self.parse_expr()?;
+        if self.lexer.peek() == Token::When(ldef!()) {
+            self.expect(Token::When(ldef!()))?;
+            let pat = self.parse_pattern()?;
+            self.expect(Token::WideOp(ldef!(), ('-', '>')))?;
+            let stmts = if self.lexer.peek() == Token::Op(ldef!(), '{') {
+                self.parse_stmts()?
+            } else {
+                vec![self.parse_stmt()?]
+            };
+            arms.push((pat, stmts));
+        } else {
+            self.expect(Token::Op(ldef!(), '{'))?;
+            while self.lexer.peek() != Token::Op(ldef!(), '}') {
+                self.expect(Token::When(ldef!()))?;
+                let pat = self.parse_pattern()?;
+                self.expect(Token::WideOp(ldef!(), ('-', '>')))?;
+                let stmts = if self.lexer.peek() == Token::Op(ldef!(), '{') {
+                    self.parse_stmts()?
+                } else {
+                    vec![self.parse_stmt()?]
+                };
+                arms.push((pat, stmts));
+            }
+            self.expect(Token::Op(ldef!(), '}'))?;
+        }
+
+        Ok(Some(Stmt::CaseWhen(expr, arms)))
     }
 
     pub fn parse_stmt_expr(&mut self) -> Result<Option<Stmt>> {

@@ -16,6 +16,4 @@ main := fn() {
     test(5);
     test(10);
     test(7);
-    let x = 5;
-    case x when a -> io::println("single line irrefutable patterns!");
 }

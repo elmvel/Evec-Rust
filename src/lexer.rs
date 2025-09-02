@@ -33,6 +33,8 @@ pub enum Token {
     Defer(Location),
     Type(Location),
     As(Location),
+    Case(Location),
+    When(Location),
 
     // Types
     U64(Location),
@@ -81,6 +83,8 @@ impl Token {
             Token::Defer(loc) => loc.clone(),
             Token::Type(loc) => loc.clone(),
             Token::As(loc) => loc.clone(),
+            Token::Case(loc) => loc.clone(),
+            Token::When(loc) => loc.clone(),
             Token::U64(loc) => loc.clone(),
             Token::U32(loc) => loc.clone(),
             Token::U16(loc) => loc.clone(),
@@ -308,6 +312,8 @@ impl Lexer {
             "defer" => Token::Defer(loc),
             "type" => Token::Type(loc),
             "as" => Token::As(loc),
+            "case" => Token::Case(loc),
+            "when" => Token::When(loc),
             "im" => Token::WideOp(loc, ('i', 'm')),
 
             "u64" => Token::U64(loc),

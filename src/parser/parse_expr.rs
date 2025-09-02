@@ -4,9 +4,35 @@ use crate::lexer::{Lexer, Location, Token};
 use crate::errors::SyntaxError;
 use crate::parser::Result;
 use crate::precedence::*;
+use crate::patterns::Pattern;
 use crate::Parser;
 
 impl Parser {
+    pub fn parse_pattern(&mut self) -> Result<Pattern> {
+        let expr = self.parse_expr()?;
+
+        let p: Pattern = match expr {
+            Expr::Ident(token) => {
+                if token.is_sink_ident() {
+                    Pattern::Sink
+                } else {
+                    Pattern::Binding(Expr::Ident(token))
+                }
+            },
+            e @ Expr::Path(_, _) => Pattern::Binding(e),
+            e @ Expr::Number(_)
+                | e @ Expr::Bool(_)
+                | e @ Expr::String(_)
+                | e @ Expr::CString(_)
+                | e @ Expr::Null(_) => {
+                    Pattern::Literal(e)
+                },
+            e @ Expr::Range(_, _, _) => Pattern::Range(e),
+            _ => todo!("error saying not a pattern")
+        };
+        Ok(p)
+    }
+    
     pub fn parse_expr(&mut self) -> Result<Expr> {
         let mut expr = self.parse_expr_bp(0)?;
         if self.lexer.peek() == Token::As(ldef!()) {

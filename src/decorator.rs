@@ -155,6 +155,13 @@ impl Decorator {
             Stmt::Return(_, _, _, _) => (),
             Stmt::Defer(_, ref mut box_stmt) => {
                 Self::rta_stmt(box_stmt, alias_map);
+            },
+            Stmt::CaseWhen(_, arms) => {
+                for (_, stmts) in arms {
+                    for stmt in stmts {
+                        Self::rta_stmt(stmt, alias_map)
+                    }
+                }
             }
         }
     }
@@ -235,6 +242,17 @@ impl Decorator {
             Stmt::Continue(_) => false,
             Stmt::Return(_, _, _, _) => true,
             Stmt::Defer(_, box_stmt) => Self::rtc_stmt(box_stmt),
+            Stmt::CaseWhen(_, arms) => {
+                let mut result = false;
+                for (_, stmts) in arms {
+                    for stmt in stmts {
+                        if Self::rtc_stmt(stmt) {
+                            result = true;
+                        }
+                    }
+                }
+                result
+            },
         }
     }
 
@@ -335,6 +353,14 @@ impl Decorator {
                 }
             }
             Stmt::Defer(_, box_stmt) => Self::gav_stmt(box_stmt, addrvars),
+            // TODO: not here, but look into expr of CaseWhen in the decorator
+            Stmt::CaseWhen(_, arms) => {
+                for (_, stmts) in arms {
+                    for stmt in stmts {
+                        Self::gav_stmt(stmt, addrvars);
+                    }
+                }
+            },
         }
     }
 }

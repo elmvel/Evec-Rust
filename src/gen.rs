@@ -12,6 +12,7 @@ use crate::errors::SyntaxError;
 use crate::ir::*;
 use crate::lexer::{Location, Token};
 use crate::parser::Result;
+use crate::patterns::{Transformer, MatchMeta, Row, Body, Decision};
 use crate::BuildOptions;
 use crate::{Backend, SUFFIX_C, SUFFIX_LLVM, SUFFIX_QBE};
 
@@ -961,7 +962,7 @@ function l $.slice.len(l %slc) {{
         match stmt {
             Stmt::Dbg(expr) => {
                 let tv = self.emit_expr(comptime, expr, None)?;
-                self.dbg_print_val(comptime, tv);
+                self.dbg_print_val(comptime, tv)?;
                 Ok(())
             }
             Stmt::Let(name, astype, expr, is_constant) => {
@@ -1158,9 +1159,95 @@ function l $.slice.len(l %slc) {{
                 } else {
                     Err(error!(loc, "Cannot defer here (did you try to nest them?)"))
                 }
+            },
+            Stmt::CaseWhen(name, arms) => {
+                let mut t = Transformer { meta: MatchMeta::default() };
+                let rows = arms
+                    .into_iter()
+                    .map(|(pat, body)| Row {
+                        cols: pat.into_cols(name.clone(), comptime, self),
+                        guard: None, // TODO: support guards
+                        body: Body {
+                            bindings: Vec::new(),
+                            body,
+                        },
+                    })
+                    .collect();
+                let match_ = t.compile_match(comptime, rows);
+                // println!("MATCH: {:?}", match_.tree);
+                self.emit_decision(comptime, match_.tree);
+                Ok(())
             }
             _ => todo!("stmt {stmt:?}"),
         }
+    }
+
+    pub fn emit_decision(
+        &mut self,
+        comptime: &mut Compiletime,
+        decision: Decision
+    ) -> Result<()> {
+        match decision {
+            Decision::Match(body) => {
+                self.push_frame();
+                for (expr, tv) in body.bindings {
+                    let loc = expr.loc();
+                    let Expr::Ident(Token::Ident(_, text)) = expr else { unreachable!() };
+                    let frame = self.current_frame()?;
+                    if frame.symtab_lookup(&text, loc.clone()).is_ok() {
+                        return Err(error!(
+                            loc,
+                            "Redefinition of variable {text} is not allowed!"
+                        ));
+                    }
+                    frame.symtab_store(text, tv);
+                }
+                self.emit_stmts(comptime, body.body, None)?;
+                self.pop_frame();
+            },
+            Decision::Failure => {
+                todo!()
+            },
+            Decision::Conditional(expr, body, box_decision) => {
+                todo!()
+            },
+            Decision::Switch(tv, cases, opt_box_decision) => {
+                let ii = self.ctx.label_cond();
+                for case in cases {
+                    let loc = case.expr.loc();
+                    let test = self.emit_expr(comptime, case.expr, None)?;
+                    test.typ.assert_comparable(loc)?;
+
+                    // TODO: abstract away comparisons
+                    let tag = self.ctx.alloc();
+                    let tv2 = self.block_add_assign(
+                        temp![tag, Type::Bool],
+                        Instruction::Cmp(
+                            Op::EqEq,
+                            test.typ.clone(),
+                            Value::Temp(tv.clone()),
+                            Value::Temp(test),
+                        ),
+                    );
+
+                    let i = self.ctx.label_cond();
+                    self.block_add_discard(Instruction::Jnz(
+                        Value::Temp(tv2),
+                        label!["i{i}_body"],
+                        label!["i{i}_else"],
+                    ));
+                    self.start_block(&format!("i{i}_body"));
+                    self.emit_decision(comptime, case.body);
+                    self.block_add_discard(Instruction::Jmp(label!["i{ii}_end"]));
+                    self.start_block(&format!("i{i}_else"));
+                }
+                if let Some(box_decision) = opt_box_decision {
+                    self.emit_decision(comptime, *box_decision);
+                }
+                self.start_block(&format!("i{ii}_end"));
+            },
+        };
+        Ok(())
     }
 
     pub fn emit_expr(
